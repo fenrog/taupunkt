@@ -1,0 +1,9 @@
+[submodule "radonreader"]
+	path = radonreader
+	url = https://github.com/EtoTen/radonreader
+[submodule "wiringpi"]
+	path = wiringpi
+	url = https://github.com/wiringpi/wiringpi
+[submodule "433Utils"]
+	path = 433Utils
+	url = https://github.com/ninjablocks/433Utils.git
