@@ -7,7 +7,7 @@ Responsibilities:
 - output on the LCD
 - output on the switches
 
-Archtecture:
+Architecture:
 - implemented in a thread that tries to update the LCD content once a second
 """
 
@@ -32,6 +32,7 @@ class View(threading.Thread):
         self.should_stop = threading.Event() # create an unset event on init
         self.mcp = None
         self.lcd = None
+        self.lcd_needs_recovery = False
         self.leds = Leds()
         self.leds.red(True)
         self.leds.green(True)
@@ -45,15 +46,45 @@ class View(threading.Thread):
     def backlight(self, on):
         self.mcp.output(3, on)    # switch the LCD backlight
 
+    def init_display(self):
+        """This is a stripped down __init__() function of Adafruit_LCD2004 to recover from LCD errors."""
+        try:
+            self.lcd.GPIO.setmode(self.lcd.GPIO.BCM) #GPIO=None use Raspi PIN in BCM mode
+            self.lcd.GPIO.setup(self.lcd.pin_e, self.lcd.GPIO.OUT)
+            self.lcd.GPIO.setup(self.lcd.pin_rs, self.lcd.GPIO.OUT)
+
+            for pin in self.lcd.pins_db:
+                self.lcd.GPIO.setup(pin, self.lcd.GPIO.OUT)
+
+            self.lcd.write4bits(0x33)  # initialization
+            self.lcd.write4bits(0x32)  # initialization
+            self.lcd.write4bits(0x28)  # 2 line 5x7 matrix
+            self.lcd.write4bits(0x0C)  # turn cursor off 0x0E to enable cursor
+            self.lcd.write4bits(0x06)  # shift cursor right
+            self.lcd.write4bits(self.lcd.LCD_ENTRYMODESET | self.lcd.displaymode)  # set the entry mode
+
+            self.lcd.write4bits(self.lcd.LCD_CLEARDISPLAY)  # command to clear display
+            self.lcd_needs_recovery = False
+        except Exception as e:
+            print(e)
+
     def update(self):
-        self.lcd.setCursor(0,0)  # set cursor position
-        self.lcd.message(self.line1)
-        self.lcd.setCursor(0,1)  # set cursor position
-        self.lcd.message(self.line2)
-        self.lcd.setCursor(0,2)  # set cursor position
-        self.lcd.message(self.line3)
-        self.lcd.setCursor(0,3)  # set cursor position
-        self.lcd.message(self.line4)
+        if self.lcd_needs_recovery:
+            self.init_display()
+
+        if not self.lcd_needs_recovery:
+            try:
+                self.lcd.setCursor(0,0)  # set cursor position
+                self.lcd.message(self.line1)
+                self.lcd.setCursor(0,1)  # set cursor position
+                self.lcd.message(self.line2)
+                self.lcd.setCursor(0,2)  # set cursor position
+                self.lcd.message(self.line3)
+                self.lcd.setCursor(0,3)  # set cursor position
+                self.lcd.message(self.line4)
+            except Exception as e:
+                print(e)
+                self.lcd_needs_recovery = True
 
     def on_change_time(self):
         now = datetime.now()
@@ -200,17 +231,15 @@ class View(threading.Thread):
 
 
 if __name__ == '__main__':
-    view = View(None)
+    view = View()
     try:
         view.start()
         while(True):
-            view.on_change_radon(None, False) # Bq = None
+            view.on_change_radon(None) # Bq = None
             time.sleep(1)
-            view.on_change_radon(123, False)  # valid
+            view.on_change_radon(123)  # valid
             time.sleep(1)
-            view.on_change_radon(123, True)   # Error
-            time.sleep(1)
-            view.on_change_radon(321, False)  # valid
+            view.on_change_radon(321)  # valid
             time.sleep(1)
             view.on_change_internal_temperature(+22.2) # valid
             time.sleep(1)
