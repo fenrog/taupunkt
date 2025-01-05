@@ -7,3 +7,6 @@
 [submodule "433Utils"]
 	path = 433Utils
 	url = https://github.com/ninjablocks/433Utils.git
+[submodule "Freenove_LCD_Module"]
+	path = Freenove_LCD_Module
+	url = https://github.com/Freenove/Freenove_LCD_Module
