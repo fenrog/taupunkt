@@ -50,6 +50,7 @@ Optional in future:
 """
 
 import time
+from Database import Database
 
 
 RADON_BQ_FAN_ON = 100  # if the Radon Bq value is >= this limit, the ventilation shall start (if other conditons allow)
@@ -95,6 +96,7 @@ class Model():
             "out_fan_on": None,
             "in_fan_on": None,
         }
+        self.db = Database()
 
     def on_time(self):
         if (not self.communication_errors) and (not self.radon["error"]):
@@ -113,6 +115,7 @@ class Model():
 
     def on_change_radon(self, Bq, error):
         print(int(time.time()), "on_change_radon({}, {})".format(Bq, error))
+        self.db.write_RD200(Bq, error)
         if self.radon["Bq"] != Bq:
             self.radon["Bq"] = Bq
             self.view.on_change_radon(Bq)
@@ -141,6 +144,13 @@ class Model():
         communication_errors = []
         for key in averaged:
             print("{:3s} {}".format(key, averaged[key]))
+            self.db.write_DHT22(
+                key=key,
+                temperature= averaged[key]["temperature"],
+                humidity=averaged[key]["humidity"],
+                dewpoint=averaged[key]["dewpoint"],
+                error=averaged[key]["error"],
+            )
             if averaged[key]["dewpoint"] is not None:
                if "ext" != key:
                     if min_key is None:
@@ -165,7 +175,7 @@ class Model():
                 "temperature": None,
                 "humidity": None,
                 "dewpoint": None,
-                "error": None,
+                "error": True,
                 "key": None,
             }
 
@@ -294,6 +304,7 @@ class Model():
 
     def on_change_ventilation(self):
         print(int(time.time()), "on_change_ventilation()")
+        self.db.write_ventilation(self.ventilation)
         if self.ventilation["radon_request"] or self.ventilation["humidity_request"]:
             # request by at least one of radon or humidity
             if self.ventilation["dewpoint_granted"] \
@@ -332,6 +343,7 @@ class Model():
             print(self.ventilation)
             print(self.switches)
         if switches_changed:
+            self.db.write_switches(self.switches)
             self.view.on_change_switches(self.switches)
 
     def on_change_internal_location(self, location):
