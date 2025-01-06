@@ -146,6 +146,8 @@ Insbesondere die DHT22 haben relativ zueinander leichte Abweichungen die mittels
     A port of Debian Bookworm with no desktop environment (Comatible with Raspberry Pi 3/4/400/5)
     Veröffentlicht 20024-11-19
 - SD-Karte wählen und schreiben, idealerweise User, Passwort, WLAN und Sprache voreinstellen
+    Die folgende Beschreibung geht davon aus, dass der Hostname sowie der User `taupunkt` benannt werden.
+    Das spiegelt sich insbesondere im Home-Verzeichnis und in URLs wieder.
 
 ## erster Start
 - Tastatur, Monitor, Ethernet (oder temporär WLAN-Stick), Spannung anschließen
@@ -200,6 +202,7 @@ git konfigurieren
 git config --global init.defaultbranch "main"
 git config --global user.name "John Doe"
 git config --global user.email "johndoe@email.com"
+git config --global pull.rebase false
 ```
 
 klonen
@@ -507,8 +510,8 @@ Code des taupunkt Scripts:
 #! /bin/sh
 ### BEGIN INIT INFO
 # Provides: taupunkt
-# Required-Start: $syslog
-# Required-Stop: $syslog
+# Required-Start: $local_fs $network $influxdb
+# Required-Stop: $local_fs $network $influxdb
 # Default-Start: 2 3 4 5
 # Default-Stop: 0 1 6
 # Short-Description: Taupunkt Steuerung
@@ -552,6 +555,269 @@ Deaktivierung des Autostart:
 sudo update-rc.d -f taupunkt remove
 ```
 
+## Langzeit Datenlogging
+
+### USB SSD für InfluxDB einrichten [^24]
+
+USB SSD anschließen und danach suchen. Bei mir `/dev/sda`
+```
+lsblk
+```
+
+Oprional: Inhalt löschen. Darauf achten, dass bei `of=` das richtige Device angegeben ist.
+Der Befehl wird längere Zeit dauern.
+```
+sudo dd if=/dev/zero of=/dev/sda bs=4096 status=progress
+```
+
+Formatieren mit EXT4
+```
+sudo parted /dev/sda --script -- mklabel gpt
+sudo parted /dev/sda --script -- mkpart primary ext4 0% 100%
+sudo mkfs.ext4 -F /dev/sda1
+```
+
+Verifikation
+```
+sudo parted /dev/sda --script print
+```
+
+Erstellen und testweise temporäres Mounten
+```
+cd /media
+sudo mkdir influxdb
+sudo mount /dev/sda1 /media/influxdb
+ls -l /mount/influxdb  # Sollte 'lost+found' listen
+sudo umount /media/influxdb
+```
+
+Permamentes Mounten [^25]
+```
+sudo blkid /dev/sda1  # Der UUID Wert ist von Interesse, für mich ist es "e959cd31-eea7-4ea7-b5cc-c99761d8e5a5"
+
+sudo cp /etc/fstab /etc/fstab.bkp  # backup fstab
+
+sudo nano /etc/fstab  # edit fstab
+```
+
+Diese Zeilen ans Ende anhängen und dabei UUID anpassen:
+```
+# USB drive
+UUID=e959cd31-eea7-4ea7-b5cc-c99761d8e5a5 /media/influxdb ext4 noatime,x-systemd.automount,x-systemd.device-timeout=10,x-systemd.idle-timeout=1min 0 2
+```
+
+fstab testen
+```
+sudo mount -a
+ls -l /mount/influxdb  # Sollte 'lost+found' listen
+```
+
+Test ob nach einem Reboot das Laufwerk vorhanden ist
+```
+sudo reboot
+# nach reboot
+ls -l /mount/influxdb  # Sollte 'lost+found' listen
+```
+
+[^24]: https://linuxize.com/post/how-to-format-usb-sd-card-linux/
+[^25]: https://forum.endeavouros.com/t/tutorial-how-to-permanently-mount-external-internal-drives-in-linux/18688
+
+### Installation Influxdb und Grafana [^26]
+[^26]: https://grafana.com/docs/grafana/latest/getting-started/get-started-grafana-influxdb/
+
+#### Installation InfluxDB [^27]
+[^27]: https://www.influxdata.com/downloads/
+
+On the influxdata.com web page for the InfluxDB 2.x select Version `InfluxDB v2.7.11` and Platform `Ununtu & Debian (arm 64-bit)`
+
+```
+cd ~
+
+# influxdata-archive_compat.key GPG fingerprint:
+#     9D53 9D90 D332 8DC7 D6C8 D3B9 D8FF 8E1F 7DF8 B07E
+wget -q https://repos.influxdata.com/influxdata-archive_compat.key
+
+echo '393e8779c89ac8d958f81f942f9ad7fb82a25e133faddaf92e15b16e6ac9ce4c influxdata-archive_compat.key' | sha256sum -c && cat influxdata-archive_compat.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg > /dev/null
+
+echo 'deb [signed-by=/etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg] https://repos.influxdata.com/debian stable main' | sudo tee /etc/apt/sources.list.d/influxdata.list
+
+rm influxdata-archive_compat.key
+
+sudo apt update
+sudo apt install influxdb2
+
+# Installation verifizieren
+dpkg -L influxdb2
+
+# Version abfragen
+influx version
+```
+
+Noch vor dem Start der influxdb dafür sorgen, dass die Datenbanken auf dem USB Laufwerk landen
+```
+sudo cp /etc/influxdb/config.toml /etc/influxdb/config.toml.bak
+sudo nano /etc/influxdb/config.toml
+```
+
+Suche `/var/lib/influxdb` und ersetze mit `/media/influxdb`
+Das sollte zwei mal vorkommen mit unterschiedlichen Unterverzeichnissen.
+
+
+Rechte auf dem USB Laufwerk ändern und influxdb starten
+```
+sudo chown influxdb:influxdb /media/influxdb
+sudo chmod 750 /media/influxdb
+sudo systemctl unmask influxdb
+sudo systemctl enable influxdb
+sudo systemctl start influxdb
+sudo systemctl status influxdb
+```
+
+Jetzt sollten in `/media/influxdb` neue Unterverzeichnisse entsanden sein: `engine`, `influxdb.bolt` und `influxdb.sqlite`.
+
+#### Einrichtung über das Webinterface
+
+http://taupunkt:8086
+
+Klick `[GET STARTED]`
+
+Formular ausfüllen (ersetze das Passwort mit einem sinnvollen Wert):
+- Username `taupunkt`
+- Password `taupunkt_pass`
+- Confirm Password `taupunkt_pass`
+- Initial Origanization Name `taupunkt_org`
+- Initial Bucket Name `taupunkt_bucket`
+
+Klick `[CONTINUE]`
+
+Es wird ein String angezeigt im Format `XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX==`. Die `X` stehen für Zahlen, Buchstaben, Minus und Unterstrich.
+
+Kopiere und speichere diesen String in der Datei `~/influxdb.taupunkt.token`.
+
+Das ist ein `all access` Token. Halte es geheim. Daher die Zugriffsrechte auf die Datei einschränken.
+```
+chmod 600 ~/influxdb.taupunkt.token
+```
+
+Klick `[QUICK START]`
+Klick `Python`
+Klick `Get Token`
+
+Es wird ein String angezeigt im Format `export INFLUXDB_TOKEN=YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY==`.  Die `Y` stehen für Zahlen, Buchstaben, Minus und Unterstrich.
+
+Das ist der Token für Python. Kopiere und speichere diesen in der Datei `~/influxdb.python.token`.
+Entferne dabei `export INFLUXDB_TOKEN=`. Speichere nur `YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY==`.
+
+#### Python modul installieren und testen
+```
+cd ~/taupunkt
+pip install influxdb-client
+
+python Database.py --create-test-data
+python Database.py --delete-test-data
+```
+
+#### Installation Grafana [^28]
+[^28]: https://grafana.com/docs/grafana/latest/setup-grafana/installation/debian/
+
+```
+# 1. Install the prerequisite packages:
+sudo apt install -y apt-transport-https software-properties-common wget
+
+# 2. Import the GPG key:
+sudo mkdir -p /etc/apt/keyrings/
+
+wget -q -O - https://apt.grafana.com/gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/grafana.gpg > /dev/null
+
+# 3. To add a repository for stable releases, run the following command:
+echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" | sudo tee -a /etc/apt/sources.list.d/grafana.list
+
+# 4. skip this
+
+# 5. Run the following command to update the list of available packages:
+# Updates the list of available packages
+sudo apt update
+
+# 6. To install Grafana OSS, run the following command:
+sudo apt install grafana
+
+# 7. skip this
+
+# 8. Service starten
+sudo /bin/systemctl daemon-reload
+sudo systemctl enable grafana-server
+sudo systemctl start grafana-server
+sudo systemctl status grafana-server
+```
+
+Zugriff über das Webinterface:
+http://taupunkt:3000
+
+- Erster Login als User `admin` mit Passwort `admin`.
+- Passwort ändern.
+
+#### Verbindung von Grafana zur InfluxDB herstellen [^29]
+[^29]: https://www.laub-home.de/wiki/Grafana_Verbindung_zu_InfluxDB_v2_mit_InfluxQL (nicht ganz korrekt)
+
+1) http://taupunkt:8086/
+- links mit der Maus über dem Pfeil nach oben "hoovern"
+- im erscheinenden Untermenü auf `API Tokens` klicken
+- klick `GENERATE API TOKEN` -> `Custom API Token`
+
+Im neu erschienenen Fenster `Generate a Custom API Token`
+- Description: `grafana`
+- Resources
+    - Buckets: `taupunkt_bucket` select `Read`, do not select `Write`
+- Klick `GENERATE`
+- Es wird ein String angezeigt im Format  `ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ==`. Die `Z` stehen für Zahlen, Buchstaben, Minus und Unterstrich.
+- Kopiere diesen String. Er wird für die Einrichtung von grafana benötigt.
+
+2) http://taupunkt:3000
+DATA SOURCES Add your first data source (klick)
+InfluxDB Core (klick)
+- Name: `taupunkt_db`
+- Query Language: InfluxQL
+- HTTP
+    - URL: `http://localhost:8086`
+    - Allowed cookies: <bleibt leer>
+    - Timeout: <bleibt leer>
+- Auth
+    - alle sechs Optionen bleiben ausgeschaltet
+- Custom HTTP Headers (+ Add header):
+    - Header: `Authorization`
+    - Value: `Token ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ==` ok
+- InfluxDB Details
+    - Database: `taupunkt_bucket`
+    - User: `taupunkt`
+    - Password: `taupunkt_pass`
+    - HTTP Method: `GET`
+    - Min time interval: <bleibt leer>
+    - Max series: <bleibt leer>
+- klick `Save & Test`
+    falls alles ok ist, wird ein grünes Feld angezeigt `datasource is working ...`
+
+Grafana Dashboard importieren über http://taupunkt:3000
+- links im Menü auf `Dashboards` klicken
+- oben rechts `New` klicken
+- Import klicken
+- eine Kopie der Datei `~/taupunkt/taupunkt/grafana-dashboard.json` imortieren
+
+Um Tesdaten zu erzeugen:
+```
+cd ~/taupunkt
+python Database.py --create-test-data
+```
+
+Auf der grafana Seite oben rechts
+- klick `Explore data`
+- FROM autogen measurement1 SELECT field (field1), last 5 minutes, (), danach run query
+Es sollten 5 Datenpunkte angezeigt werden.
+
+Um die Testdaten zu löschen Zeitstempel und Token entsprechend anpassen:
+```
+influx delete --bucket taupunkt_bucket --start 2025-01-01T00:00:00.0Z --stop 2025-01-07T00:00:00Z --org taupunkt_org --token XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX==
+```
+
 # Offene Punkte
 
 ## Aufbau
@@ -587,15 +853,3 @@ sudo update-rc.d -f taupunkt remove
 ## Software
 
 - automatischer Neustart falls es nicht mehr läuft
-
-- Langzeit Messwerterfassung
-    - 5 x Temperatur + relative Luftfeuchtigkeit + Taupunkt; minütlich 5 x 3 Werte
-        -> 15 Werte / min
-        -> 900 Werte / h
-        -> 21600 Werte / Tag
-        -> 7884000 / Jahr
-    - 1 x Radon; en Werte alle 10 Minuten
-        -> 6 Werte / h
-    - 1 * Boolean für lüften / nicht lüften
-
-- Grafana mit Webinterface zur Visualisierung der Daten
