@@ -86,6 +86,10 @@ class DHT22():
             try:
                 data[key]["temperature"] = self.dhtDevice[key].temperature
                 data[key]["humidity"] = self.dhtDevice[key].humidity
+                if (0.0 == data[key]["temperature"]) and (0.0 == data[key]["humidity"]):
+                    print(f"Nonsense data, most likely [0x00, 0x00, 0x00, 0x00, 0x00] has been 'received' from a non present sensor at '{key}'")
+                    raise Exception("Nonsense data, most likely [0x00, 0x00, 0x00, 0x00, 0x00] has been 'received' from a non present sensor at '{key}'")
+                print("{:18.7f} {:3s} {:5.2f}°C {:5.2f}%".format(time.time(), key, data[key]["temperature"], data[key]["humidity"]))
                 if self.offset_correction:
                     data[key]["temperature"] += self.config[key]["t_offset"]
                     data[key]["humidity"] += self.config[key]["r_offset"]

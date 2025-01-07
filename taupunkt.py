@@ -27,7 +27,7 @@ def setup():
     signal.signal(signal.SIGINT, signal_handler)
     print('Terminated with Ctrl+C')
     view = View()
-    model = Model(view, verbose=True)
+    model = Model(view)
     view.start()
     controller = Controller(model)
     controller.start()

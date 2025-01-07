@@ -83,7 +83,7 @@ class Database():
             self.backup_point(point)
 
     def rewrite_point(self, point):
-        print("rewrite_point()", point)
+        # print("rewrite_point()", point)
         try:
             if point.startswith("RD200"):
                 time_precission="m"
