@@ -10,11 +10,6 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 POINTS_FILE = r"/home/taupunkt/points.txt"
 
 
-def backup_point(point):
-    with open(POINTS_FILE, "a") as f:
-        f.write("{} {}\n".format(point, int(datetime.now(timezone.utc).timestamp())))
-
-
 def x2float(x):
     try:
         x = float(x)
@@ -46,11 +41,7 @@ class Database():
             .field("dewpoint", x2float(dewpoint))
             .field("error", True if error else False)
         )
-        try:
-            self.write_api.write(bucket=self.bucket, org=self.org, record=point, write_precision=WritePrecision.S, time_precission="s")
-        except Exception as e:
-            print(e)
-            backup_point(point)
+        self.write_point(point=point, time_precission="s")
 
     def write_RD200(self, radon, error):
         point = (
@@ -58,11 +49,7 @@ class Database():
             .field("radon", x2float(radon))
             .field("error", True if error else False)
         )
-        try:
-            self.write_api.write(bucket=self.bucket, org=self.org, record=point, write_precision=WritePrecision.S, time_precission="m")
-        except Exception as e:
-            print(e)
-            backup_point(point)
+        self.write_point(point=point, time_precission="m")
 
     def write_ventilation(self, ventilation):
         point = (
@@ -73,11 +60,7 @@ class Database():
             .field("internal_temp_granted", True if ventilation["internal_temp_granted"] else False)
             .field("external_temp_granted", True if ventilation["external_temp_granted"] else False)
         )
-        try:
-            self.write_api.write(bucket=self.bucket, org=self.org, record=point, write_precision=WritePrecision.S, time_precission="s")
-        except Exception as e:
-            print(e)
-            backup_point(point)
+        self.write_point(point=point, time_precission="s")
 
     def write_switches(self, switches):
         point = (
@@ -85,19 +68,56 @@ class Database():
             .field("out_fan_on", True if switches["out_fan_on"] else False)
             .field("in_fan_on", True if switches["in_fan_on"] else False)
         )
+        self.write_point(point=point, time_precission="s")
+
+    def backup_point(self, point):
+        with open(POINTS_FILE, "a") as f:
+            f.write("{} {}\n".format(point, int(datetime.now(timezone.utc).timestamp())))
+
+    def write_point(self, point, time_precission):
         try:
-            self.write_api.write(bucket=self.bucket, org=self.org, record=point, write_precision=WritePrecision.S, time_precission="s")
+            self.write_api.write(bucket=self.bucket, org=self.org, record=point, write_precision=WritePrecision.S, time_precission=time_precission)
+            self.rewrite_points() # it worked, check whether there is somethng to rewrite
         except Exception as e:
             print(e)
-            backup_point(point)
+            self.backup_point(point)
 
-    def write_point(self, point):
+    def rewrite_point(self, point):
+        print("rewrite_point()", point)
         try:
-            self.write_api.write(bucket=self.bucket, org=self.org, record=point, write_precision=WritePrecision.S, time_precission="s")
+            if point.startswith("RD200"):
+                time_precission="m"
+            else:
+                time_precission="s"
+            self.write_api.write(bucket=self.bucket, org=self.org, record=point, write_precision=WritePrecision.S, time_precission=time_precission)
             return True
         except Exception as e:
             print(e)
             return False
+
+    def rewrite_points(self):
+        if os.path.isfile(POINTS_FILE):
+            points = []
+            failed = []
+            with open(POINTS_FILE, 'r') as f:
+                data = f.read().split('\n')
+                for line in data:
+                    if line.strip():
+                        points.append(line.strip())
+            for point in points:
+                if not self.rewrite_point(point):
+                    failed.append(points)
+            if failed:
+                print("ERROR: These could not be written")
+                with open(POINTS_FILE, "W") as f:
+                    for point in failed:
+                        print(point)
+                        f.write("{}\n".format(point))
+            else:
+                try:
+                    os.remove(POINTS_FILE)
+                except Exception as e:
+                    print(e)
 
 
 def create_test_data():
@@ -162,39 +182,19 @@ def delete_test_data():
         print(result.stderr.decode(sys.stderr.encoding))
 
 
-def write_points():
-    points = []
-    failed = []
-    with open(POINTS_FILE, 'r') as f:
-        data = f.read().split('\n')
-        for line in data:
-            if line.strip():
-                points.append(line.strip())
-    db = Database()
-    for point in points:
-        if not db.write_point(point):
-            failed.append(points)
-    if failed:
-        print("ERROR: These could not be written")
-        for point in failed:
-            f.write("{}\n".format(point))
-
-
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="InfluxDB Test")
     parser.add_argument('--create-test-data', action='store_true', help="Creates test data. Caution, do not execute when your system is in real use!")
     parser.add_argument('--delete-test-data', action='store_true', help="Delete test data. Caution, do not execute when your system is in real use!")
-    parser.add_argument('--write-points', action='store_true', help="points that could not be written at startup are writen with ths command.")
     args = parser.parse_args()
-    if (args.create_test_data == False) and (args.delete_test_data == False) and (args.write_points == False):
+    if (args.create_test_data == False) and (args.delete_test_data == False):
         parser.print_help()
     if args.create_test_data:
         create_test_data()
     if args.delete_test_data:
         delete_test_data()
-    if args.write_points:
-        write_points()
+
 
 if __name__ == '__main__':
     main()
