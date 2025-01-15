@@ -46,7 +46,7 @@ def calc_dewpoint(t: float, r: float) -> float:
 
     # Taupunkttemperatur (°C)
     tt = (b*v) / (a-v)
-    return tt
+    return float(tt)
 
 
 def calc_avg(a_list):

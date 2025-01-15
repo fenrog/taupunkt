@@ -189,6 +189,10 @@ class View(threading.Thread):
             self.switch.off()
 
     def run(self):
+        # set the switch off
+        self.switch.start()
+        self.switch.off()
+
         # Create PCF8574 GPIO adapter.
         try:
             self.mcp = PCF8574_GPIO(PCF8574_address)
@@ -199,15 +203,11 @@ class View(threading.Thread):
                 print ('I2C Address Error !')
                 exit(1)
 
-        # set the switch off
-        self.switch.start()
-        self.switch.off()
-
         # Create LCD, passing in MCP GPIO adapter.
         self.lcd = Adafruit_CharLCD(pin_rs=0, pin_e=2, pins_db=[4,5,6,7], GPIO=self.mcp)
+        self.backlight(True)
         self.lcd.begin(20,4)     # set number of LCD lines and columns
         self.lcd.clear()
-        self.backlight(True)
         self.update()
         while not self.should_stop.is_set():
             t_wakeup = int(time.time() + 1)
@@ -223,7 +223,8 @@ class View(threading.Thread):
 
     def stop(self):
         self.should_stop.set()
-        self.lcd.clear()
+        if self.lcd is not None:
+            self.lcd.clear()
         self.backlight(False)
         self.leds.red(False)
         self.leds.green(False)

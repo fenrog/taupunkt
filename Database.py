@@ -131,19 +131,16 @@ def create_test_data():
             error = False
         offset = 0
         for key in ["ext", "NO", "SO", "SW", "NW"]:
-            print(int(time.time()), end=": ")
             if error:
                 db.write_DHT22(key=key, temperature=None, humidity=None, dewpoint=None, error=error)
             else:
                 db.write_DHT22(key=key, temperature=20+i+offset, humidity=50+i+offset, dewpoint=10+i+offset, error=error)
         if 0 == i % 3:
-            print(int(time.time()), end=": ")
             if error:
                 db.write_RD200(radon=200+i, error=error)
             else:
                 db.write_RD200(radon=200+i, error=error)
 
-        print(int(time.time()), end=": ")
         db.write_ventilation({
             "radon_request": toggle,
             "humidity_request": toggle,
@@ -152,7 +149,6 @@ def create_test_data():
             "external_temp_granted": toggle,
         })
 
-        print(int(time.time()), end=": ")
         db.write_switches({
             "out_fan_on": toggle,
             "in_fan_on": toggle,

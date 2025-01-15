@@ -1,6 +1,16 @@
-import subprocess
 import threading
 import time
+
+VARIANT_CODESEND = 1
+VARIANT_RPI_RF_SEND = 2
+VARIANT_RPI_RF_GPIOD = 3
+VARIANT = VARIANT_RPI_RF_SEND
+
+if VARIANT in [VARIANT_CODESEND, VARIANT_RPI_RF_SEND]:
+    import subprocess
+else:
+    import gpiod
+    from rpi_rf_gpiod import RFDevice
 
 """
 intended to be used with https://www.amazon.de/gp/product/B0BZJBPTB7
@@ -24,6 +34,12 @@ class Switch(threading.Thread):
         self.verbose = verbose
         self.is_on = False
         self.should_stop = threading.Event() # create an unset event on init
+        if VARIANT == VARIANT_RPI_RF_GPIOD:
+            self.chip = gpiod.Chip("gpiochip0")
+            self.gpio = self.chip.get_line(17)
+            self.rfdevice = RFDevice(self.gpio)
+            self.rfdevice.tx_repeat = 4
+            self.gpio.request(consumer="rpi-rf_send", type=gpiod.LINE_REQ_DIR_OUT)
 
     def on(self):
         if not self.is_on:
@@ -41,19 +57,31 @@ class Switch(threading.Thread):
 
     def transmit(self):
         try:
-            command = r"./433Utils/RPi_utils/codesend {}".format(self.on_code if self.is_on else self.off_code).split()
-            result = subprocess.run(command, stdout=subprocess.PIPE)
-            if self.verbose:
-                print(int(time.time()), result.stdout)
+            if VARIANT == VARIANT_CODESEND:
+                command = r"./433Utils/RPi_utils/codesend {}".format(self.on_code if self.is_on else self.off_code).split()
+                result = subprocess.run(command, stdout=subprocess.PIPE)
+                if self.verbose:
+                    print(int(time.time()), result.stdout)
+
+            elif VARIANT == VARIANT_RPI_RF_SEND:
+                command = r"rpi-rf_send -g 17 {}".format(self.on_code if self.is_on else self.off_code).split()
+                result = subprocess.run(command, stdout=subprocess.PIPE)
+                if self.verbose:
+                    print(int(time.time()), result.stdout)
+
+            elif VARIANT == VARIANT_RPI_RF_GPIOD:
+                self.rfdevice.tx_code(self.on_code if self.is_on else self.off_code, 1, 350, 24)
+                if self.verbose:
+                    print(int(time.time()), self.on_code if self.is_on else self.off_code)
         except Exception as e:
-            if result is not None:
-                print(result)
+            if VARIANT in [VARIANT_CODESEND, VARIANT_RPI_RF_SEND]:
+                if result is not None:
+                    print(result)
             print(e)
 
     def run(self):
         self.t_next_transmission = time.time()
         while not self.should_stop.is_set():
-            # print(int(time.time()), int(self.t_next_transmission))
             if time.time() >= self.t_next_transmission:
                 self.t_next_transmission += 60  # next desired transmission in 60 seconds
                 self.transmit()
@@ -63,7 +91,6 @@ class Switch(threading.Thread):
                 t_sleep = 1  # do not wait longer than one second in order to stop asap
             if t_sleep < 0:
                t_sleep = 0  # avoid exception due to negative time
-            # print("sleep", t_sleep)
             time.sleep(t_sleep)
         self.transmit() # take care swicth is off at the end
 

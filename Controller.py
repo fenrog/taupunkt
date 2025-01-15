@@ -23,11 +23,11 @@ class Controller(threading.Thread):
         threading.Thread.__init__(self)
         self.model = model
         self.should_stop = threading.Event() # create an unset event on init
-        self.RD200 = RD200(self.on_change_RD200)
+        self.RD200 = RD200(self.on_update_RD200)
         self.DHT22 = Dewpoint(self.on_update_DHT22)
 
-    def on_change_RD200(self, Bq, error):
-        self.model.on_change_radon(Bq, error)
+    def on_update_RD200(self, Bq, error):
+        self.model.on_update_radon(Bq, error)
 
     def on_update_DHT22(self, averaged):
         self.model.on_update_dewpoints(averaged)
@@ -46,10 +46,9 @@ class Controller(threading.Thread):
 
 def main():
     class Model():
-        def on_change_radon(self, Bq, error):
+        def on_update_radon(self, Bq, error):
             print(Bq, error)
-        def on_update_dewpoints(self, timestamp, averaged):
-            print(timestamp)
+        def on_update_dewpoints(self, averaged):
             for key in averaged:
                 print("{:3s} {}".format(key, averaged[key]))
     model = Model()
