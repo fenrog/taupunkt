@@ -1,16 +1,18 @@
 import threading
 import time
 
-VARIANT_CODESEND = 1
-VARIANT_RPI_RF_SEND = 2
-VARIANT_RPI_RF_GPIOD = 3
-VARIANT = VARIANT_RPI_RF_SEND
+VARIANT_CODESEND = 1      # codesend uses GPIO17; ./433Utils/RPi_utils/codesend.cpp has to be edited and compiled to change
+VARIANT_RPI_RF_SEND = 2   # uses GPIO as configured
+VARIANT_RPI_RF_GPIOD = 3  # uses GPIO as configured
+VARIANT = VARIANT_RPI_RF_GPIOD
 
 if VARIANT in [VARIANT_CODESEND, VARIANT_RPI_RF_SEND]:
     import subprocess
 else:
     import gpiod
     from rpi_rf_gpiod import RFDevice
+
+GPIO = 17
 
 """
 intended to be used with https://www.amazon.de/gp/product/B0BZJBPTB7
@@ -36,7 +38,7 @@ class Switch(threading.Thread):
         self.should_stop = threading.Event() # create an unset event on init
         if VARIANT == VARIANT_RPI_RF_GPIOD:
             self.chip = gpiod.Chip("gpiochip0")
-            self.gpio = self.chip.get_line(17)
+            self.gpio = self.chip.get_line(GPIO)
             self.rfdevice = RFDevice(self.gpio)
             self.rfdevice.tx_repeat = 4
             self.gpio.request(consumer="rpi-rf_send", type=gpiod.LINE_REQ_DIR_OUT)
@@ -64,7 +66,7 @@ class Switch(threading.Thread):
                     print(int(time.time()), result.stdout)
 
             elif VARIANT == VARIANT_RPI_RF_SEND:
-                command = r"rpi-rf_send -g 17 {}".format(self.on_code if self.is_on else self.off_code).split()
+                command = r"rpi-rf_send -g {} {}".format(GPIO, self.on_code if self.is_on else self.off_code).split()
                 result = subprocess.run(command, stdout=subprocess.PIPE)
                 if self.verbose:
                     print(int(time.time()), result.stdout)

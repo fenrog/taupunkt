@@ -11,12 +11,20 @@ Architecture:
 - implemented in a thread that tries to update the LCD content once a second
 """
 
+VARIANT_ADAFRUIT = 1
+VARIANT_RPI_GPIO_I2C_LCD = 2
+VARIANT = VARIANT_RPI_GPIO_I2C_LCD
+
+
 import threading
 import time
 import sys
 from datetime import datetime
-from PCF8574 import PCF8574_GPIO
-from Adafruit_LCD2004 import Adafruit_CharLCD
+if VARIANT == VARIANT_ADAFRUIT:
+    from PCF8574 import PCF8574_GPIO
+    from Adafruit_LCD2004 import Adafruit_CharLCD
+elif VARIANT == VARIANT_RPI_GPIO_I2C_LCD:
+    from RPi_GPIO_i2c_LCD import lcd
 from Leds import Leds
 from Switch import Switch
 
@@ -30,9 +38,12 @@ class View(threading.Thread):
         threading.Thread.__init__(self)
         self.model = None
         self.should_stop = threading.Event() # create an unset event on init
-        self.mcp = None
-        self.lcd = None
-        self.lcd_needs_recovery = False
+        if VARIANT == VARIANT_ADAFRUIT:
+            self.mcp = None
+            self.lcd = None
+            self.lcd_needs_recovery = False
+        elif VARIANT == VARIANT_RPI_GPIO_I2C_LCD:
+            self.lcd = None
         self.leds = Leds()
         self.leds.red(True)
         self.leds.green(True)
@@ -44,47 +55,64 @@ class View(threading.Thread):
         self.line4 = [c for c in "+tt.t aa.a% +tt.t ie"]
 
     def backlight(self, on):
-        self.mcp.output(3, on)    # switch the LCD backlight
+        if VARIANT == VARIANT_ADAFRUIT:
+            if self.mcp is not None:
+                self.mcp.output(3, on)    # switch the LCD backlight
+        elif VARIANT == VARIANT_RPI_GPIO_I2C_LCD:
+            if self.lcd is not None:
+                self.lcd.backlight("on" if on else "off")
 
     def init_display(self):
         """This is a stripped down __init__() function of Adafruit_LCD2004 to recover from LCD errors."""
-        try:
-            self.lcd.GPIO.setmode(self.lcd.GPIO.BCM) #GPIO=None use Raspi PIN in BCM mode
-            self.lcd.GPIO.setup(self.lcd.pin_e, self.lcd.GPIO.OUT)
-            self.lcd.GPIO.setup(self.lcd.pin_rs, self.lcd.GPIO.OUT)
-
-            for pin in self.lcd.pins_db:
-                self.lcd.GPIO.setup(pin, self.lcd.GPIO.OUT)
-
-            self.lcd.write4bits(0x33)  # initialization
-            self.lcd.write4bits(0x32)  # initialization
-            self.lcd.write4bits(0x28)  # 2 line 5x7 matrix
-            self.lcd.write4bits(0x0C)  # turn cursor off 0x0E to enable cursor
-            self.lcd.write4bits(0x06)  # shift cursor right
-            self.lcd.write4bits(self.lcd.LCD_ENTRYMODESET | self.lcd.displaymode)  # set the entry mode
-
-            self.lcd.write4bits(self.lcd.LCD_CLEARDISPLAY)  # command to clear display
-            self.lcd_needs_recovery = False
-        except Exception as e:
-            print(e)
-
-    def update(self):
-        if self.lcd_needs_recovery:
-            self.init_display()
-
-        if not self.lcd_needs_recovery:
+        if VARIANT == VARIANT_ADAFRUIT:
             try:
-                self.lcd.setCursor(0,0)  # set cursor position
-                self.lcd.message(self.line1)
-                self.lcd.setCursor(0,1)  # set cursor position
-                self.lcd.message(self.line2)
-                self.lcd.setCursor(0,2)  # set cursor position
-                self.lcd.message(self.line3)
-                self.lcd.setCursor(0,3)  # set cursor position
-                self.lcd.message(self.line4)
+                self.lcd.GPIO.setmode(self.lcd.GPIO.BCM) #GPIO=None use Raspi PIN in BCM mode
+                self.lcd.GPIO.setup(self.lcd.pin_e, self.lcd.GPIO.OUT)
+                self.lcd.GPIO.setup(self.lcd.pin_rs, self.lcd.GPIO.OUT)
+
+                for pin in self.lcd.pins_db:
+                    self.lcd.GPIO.setup(pin, self.lcd.GPIO.OUT)
+
+                self.lcd.write4bits(0x33)  # initialization
+                self.lcd.write4bits(0x32)  # initialization
+                self.lcd.write4bits(0x28)  # 2 line 5x7 matrix
+                self.lcd.write4bits(0x0C)  # turn cursor off 0x0E to enable cursor
+                self.lcd.write4bits(0x06)  # shift cursor right
+                self.lcd.write4bits(self.lcd.LCD_ENTRYMODESET | self.lcd.displaymode)  # set the entry mode
+
+                self.lcd.write4bits(self.lcd.LCD_CLEARDISPLAY)  # command to clear display
+                self.lcd_needs_recovery = False
             except Exception as e:
                 print(e)
-                self.lcd_needs_recovery = True
+        elif VARIANT == VARIANT_RPI_GPIO_I2C_LCD:
+            self.lcd.clear()
+
+    def update(self):
+        if VARIANT == VARIANT_ADAFRUIT:
+            if self.lcd_needs_recovery:
+                self.init_display()
+
+            if not self.lcd_needs_recovery:
+                try:
+                    self.lcd.setCursor(0,0)  # set cursor position
+                    self.lcd.message(self.line1)
+                    self.lcd.setCursor(0,1)  # set cursor position
+                    self.lcd.message(self.line2)
+                    self.lcd.setCursor(0,2)  # set cursor position
+                    self.lcd.message(self.line3)
+                    self.lcd.setCursor(0,3)  # set cursor position
+                    self.lcd.message(self.line4)
+                except Exception as e:
+                    print(e)
+                    self.lcd_needs_recovery = True
+        elif VARIANT == VARIANT_RPI_GPIO_I2C_LCD:
+            try:
+                self.lcd.set("".join(c for c in self.line1), 1)
+                self.lcd.set("".join(c for c in self.line2), 2)
+                self.lcd.set("".join(c for c in self.line3), 3)
+                self.lcd.set("".join(c for c in self.line4), 4)
+            except Exception as e:
+                print(e)
 
     def on_change_time(self):
         now = datetime.now()
@@ -189,26 +217,34 @@ class View(threading.Thread):
             self.switch.off()
 
     def run(self):
+        print("run()")
         # set the switch off
         self.switch.start()
         self.switch.off()
 
         # Create PCF8574 GPIO adapter.
-        try:
-            self.mcp = PCF8574_GPIO(PCF8574_address)
-        except:
+        if VARIANT == VARIANT_ADAFRUIT:
             try:
-                self.mcp = PCF8574_GPIO(PCF8574A_address)
+                self.mcp = PCF8574_GPIO(PCF8574_address)
             except:
-                print ('I2C Address Error !')
-                exit(1)
+                try:
+                    self.mcp = PCF8574_GPIO(PCF8574A_address)
+                except:
+                    print ('I2C Address Error !')
+                    exit(1)
 
         # Create LCD, passing in MCP GPIO adapter.
-        self.lcd = Adafruit_CharLCD(pin_rs=0, pin_e=2, pins_db=[4,5,6,7], GPIO=self.mcp)
-        self.backlight(True)
-        self.lcd.begin(20,4)     # set number of LCD lines and columns
-        self.lcd.clear()
-        self.update()
+        if VARIANT == VARIANT_ADAFRUIT:
+            self.lcd = Adafruit_CharLCD(pin_rs=0, pin_e=2, pins_db=[4,5,6,7], GPIO=self.mcp)
+            self.backlight(True)
+            self.lcd.begin(20,4)     # set number of LCD lines and columns
+            self.lcd.clear()
+            self.update()
+        elif VARIANT == VARIANT_RPI_GPIO_I2C_LCD:
+            self.lcd = lcd.HD44780(0x27)
+            self.backlight(True)
+            self.lcd.clear()
+            self.update()
         while not self.should_stop.is_set():
             t_wakeup = int(time.time() + 1)
             t_sleep = t_wakeup - time.time()
