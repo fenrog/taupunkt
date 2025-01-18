@@ -53,16 +53,16 @@ import time
 from Database import Database
 
 
-RADON_BQ_FAN_ON = 100  # if the Radon Bq value is >= this limit, the ventilation shall start (if other conditons allow)
+RADON_BQ_FAN_ON = 150  # if the Radon Bq value is >= this limit, the ventilation shall start (if other conditons allow)
 RADON_BQ_FAN_OFF = 75  # if the Radon Bq value is <= this limit, the ventilation shall stop
 
 HUMIDITY_FAN_ON =  65  # if the relative humidity is >= this limit, the ventilation shall start (if other conditons allow)
 HUMIDITY_FAN_OFF = 55  # if the relative humidity is <= this limit, the ventilation shall stop
 
 DEWPOINT_FAN_ON =   5  # if the dewpoint difference is >= this limit, the ventilation may start (if other conditons allow)
-DEWPOINT_FAN_OFF =  3  # if the dewpoint difference is <= this limit, the ventilation has to stop
+DEWPOINT_FAN_OFF =  1  # if the dewpoint difference is <= this limit, the ventilation has to stop
 
-MIN_INTERNAL_TEMP = 10   # below this temperature no ventilation is allowed
+MIN_INTERNAL_TEMP = 7.5  # below this temperature no ventilation is allowed
 MIN_EXTERNAL_TEMP = -10  # below this temperature no ventilation is allowed
 
 
@@ -144,8 +144,9 @@ class Model():
         self.dewpoints = averaged
 
         # select internal minimum dewpoint
-        min_key = None
-        min_dewpoint = None
+        min_internal_temperature = None
+        max_internal_humidity = None
+        min_internal_dewpoint = None
         communication_errors = []
         for key in averaged:
             self.db.write_DHT22(  # will be written every 20 seconds due to Dewpoint module
@@ -155,33 +156,32 @@ class Model():
                 dewpoint=averaged[key]["dewpoint"],
                 error=averaged[key]["error"],
             )
-            if averaged[key]["dewpoint"] is not None:
-               if "ext" != key:
-                    if min_key is None:
-                        min_key = key
-                        min_dewpoint = averaged[key]["dewpoint"]
-                    elif min_dewpoint > averaged[key]["dewpoint"]:
-                        min_key = key
-                        min_dewpoint = averaged[key]["dewpoint"]
+            if averaged[key]["dewpoint"] is not None:  # if dewpoint is present, also temperature and humidity are present
+                if "ext" != key:
+                    if min_internal_temperature is None:
+                        min_internal_temperature = averaged[key]["temperature"]
+                    elif min_internal_temperature > averaged[key]["temperature"]:
+                        min_internal_temperature = averaged[key]["temperature"]
+
+                    if max_internal_humidity is None:
+                        max_internal_humidity = averaged[key]["humidity"]
+                    elif max_internal_humidity < averaged[key]["humidity"]:
+                        max_internal_humidity = averaged[key]["humidity"]
+
+                    if min_internal_dewpoint is None:
+                        min_internal_dewpoint = averaged[key]["dewpoint"]
+                    elif min_internal_dewpoint > averaged[key]["dewpoint"]:
+                        min_internal_dewpoint = averaged[key]["dewpoint"]
 
             else:
                 communication_errors.append(key)
-        if (min_key):
-            internal = {
-                "temperature": averaged[min_key]["temperature"],
-                "humidity": averaged[min_key]["humidity"],
-                "dewpoint": averaged[min_key]["dewpoint"],
-                "error": False,
-                "key": min_key,
-            }
-        else:
-            internal = {
-                "temperature": None,
-                "humidity": None,
-                "dewpoint": None,
-                "error": True,
-                "key": None,
-            }
+        internal = {
+            "temperature": min_internal_temperature,
+            "humidity": max_internal_humidity,
+            "dewpoint": min_internal_dewpoint,
+            "error": min_internal_dewpoint is not None,  # if dewpoint is present, also temperature and humidity are present
+            "key": "in",
+        }
 
         # collect external data
         external = {
