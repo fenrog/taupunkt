@@ -214,8 +214,9 @@ git clone --recurse-submodules git@github.com:fenrog/taupunkt.git
 ## Python vorbereiten
 ```
 cd ~/taupunkt
-python3 -m venv venv-taupunkt       # virtuelle Umgebung vorbereiten
-source venv-taupunkt/bin/activate   # virtuelle Umgebung aktivieren
+# sudo apt install python3-libgpiod                     # Version 1.6.3
+python3 -m venv --system-site-packages venv-taupunkt    # virtuelle Umgebung vorbereiten
+source venv-taupunkt/bin/activate                       # virtuelle Umgebung aktivieren
 pip install --upgrade pip
 pip install setuptools
 pip install wheel
@@ -360,7 +361,7 @@ sudo reboot
 # nach reboot
 cd ~/taupunkt
 source venv-taupunkt/bin/activate
-lsmod | grep pwm
+lsmod | grep pwm  # erwartet: pwm_bcm2835
 pip install rpi-hardware-pwm
 ```
 
@@ -417,7 +418,7 @@ edit RFSniffer.cpp and change `int PIN = 2;` to `int PIN = 1; // GPIO_18`
 make all
 ```
 
-#### Inbetriebnahme 433 MHz Sender
+#### Aufnahme der Codes des originalen 433 MHz Senders
 
 Zum Anlernen wird ein 433 MHz Empfänger benötigt.
 wiringpi und 433Utils müssen gebaut sein.
@@ -426,12 +427,30 @@ Das Datensignal des Empfängers ist mit GPIO_18 verbunden.
 Sender und Empfänger sind mit GND und +5V verbunden.
 
 Mit dem RFSniffer werden die Codes für `an` und `aus` der Fernbedienung die zum 433 MHz Schalter abgehört.
-Diese Codes werden dann benötigt um die Scripts bei bedarf anzupassen.
+Diese Codes werden dann benötigt um die Scripts bei Bedarf anzupassen.
 ```
 cd ~/taupunkt/433Utils/RPi_utils 
 sudo ./RFSniffer
 ```
 Bei mir sind die Codes für `an` = 2229972 und `aus` = 2229970.
+Die erlernten Codes sind in Switch.py und in View.py einzutragen.
+
+[^20]: https://tutorials-raspberrypi.de/raspberry-pi-funksteckdosen-433-mhz-steuern/
+
+#### Python Modul für den 433 MHz Sender rpi-rf-gpiod [^21]
+
+[^21]: https://github.com/milaq/rpi-rf
+
+```
+pip install rpi-rf-gpiod
+```
+
+Ein erster Test kann damit erfolgen:
+```
+rpi-rf_send 2229972 -g 17
+rpi-rf_send 2229970 -g 17
+```
+
 Die erlernten Codes sind in Switch.py und in View.py einzutragen.
 
 Zum Test den Schalter mit der original Fernbedieunung einschalten. Dann Switch.py starten. Der Schalter sollte unmittelbar ausgeschalet werden. Weiter geht es nach 10 Sekunden mit an, nach 10 Sekunden aus, nach 10 Sekunden an, nach 60 Sekunden an (automatische Wiederholung), nach 60 Sekunden an (automatische Wiederholung), nach 10 Sekunden aus.
@@ -441,7 +460,12 @@ cd ~/taupunkt
 python Switch.py
 ```
 
-[^20]: https://tutorials-raspberrypi.de/raspberry-pi-funksteckdosen-433-mhz-steuern/
+### alternatives Modul für LCD
+
+```
+pip install RPi-GPIO-I2C-LCD
+```
+
 
 ### Modul für LCD [^21] [^22]
 
@@ -460,9 +484,9 @@ sudo reboot
 # nach reboot
 cd ~/taupunkt
 source venv-taupunkt/bin/activate
-lsmod | grep i2c
+lsmod | grep i2c  # erwartet: i2c_bcm2835 und i2c_dev
 sudo apt install i2c-tools
-sudo i2cdetect -y 1
+sudo i2cdetect -y 1  # erwartet: 27
 pip install smbus
 ```
 
