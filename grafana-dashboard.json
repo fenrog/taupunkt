@@ -1640,6 +1640,7 @@
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 1,
           "mappings": [],
           "max": 50,
           "min": -20,
@@ -1907,17 +1908,23 @@
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 1,
+          "fieldMinMax": false,
           "mappings": [],
           "thresholds": {
-            "mode": "absolute",
+            "mode": "percentage",
             "steps": [
               {
                 "color": "green",
                 "value": null
               },
               {
+                "color": "#EAB839",
+                "value": 65
+              },
+              {
                 "color": "red",
-                "value": 80
+                "value": 70
               }
             ]
           },
@@ -2172,6 +2179,7 @@
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 1,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
