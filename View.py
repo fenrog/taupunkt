@@ -217,7 +217,6 @@ class View(threading.Thread):
             self.switch.off()
 
     def run(self):
-        print("run()")
         # set the switch off
         self.switch.start()
         self.switch.off()

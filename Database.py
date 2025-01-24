@@ -5,6 +5,7 @@ import sys
 from datetime import datetime, timezone
 from influxdb_client import InfluxDBClient, Point, WritePrecision
 from influxdb_client.client.write_api import SYNCHRONOUS
+from Formulas import get_lim, get_absolute_humidity
 
 
 POINTS_FILE = r"/home/taupunkt/points.txt"
@@ -31,6 +32,7 @@ class Database():
 
         self.client = InfluxDBClient(url=self.url, token=self.token, org=self.org)
         self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
+        self.query_api = self.client.query_api()
 
     def write_DHT22(self, key, temperature, humidity, dewpoint, error):
         point = (
@@ -77,13 +79,12 @@ class Database():
     def write_point(self, point, time_precission):
         try:
             self.write_api.write(bucket=self.bucket, org=self.org, record=point, write_precision=WritePrecision.S, time_precission=time_precission)
-            self.rewrite_points() # it worked, check whether there is somethng to rewrite
+            self.rewrite_points() # it worked, check whether there is something to rewrite
         except Exception as e:
             print(e)
             self.backup_point(point)
 
     def rewrite_point(self, point):
-        # print("rewrite_point()", point)
         try:
             if point.startswith("RD200"):
                 time_precission="m"
@@ -118,6 +119,16 @@ class Database():
                     os.remove(POINTS_FILE)
                 except Exception as e:
                     print(e)
+
+    def test(self):
+        query = 'from(bucket:"taupunkt_bucket")\
+|> range(start: -1m)\
+|> filter(fn:(r) => r._measurement == "DHT22")\
+|> filter(fn:(r) => r.key == "NO")\
+|> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")\
+'
+        tables = self.query_api.query(query)
+        return tables
 
 
 def create_test_data():
@@ -178,18 +189,40 @@ def delete_test_data():
         print(result.stderr.decode(sys.stderr.encoding))
 
 
+def test():
+    db = Database()
+    tables = db.test()
+    for table in tables:
+        for record in table.records:
+            print(type(record.values))
+            for (k, v) in record.values.items():
+                print(" ", k, v)
+            if record.values["error"] == False:
+                temperature = record.values["temperature"]
+                humidity = record.values["humidity"]
+                if "lim" not in record.values:
+                    lim = get_lim(temperature)
+                    print("  lim", lim)
+                if "aH" not in record.values:
+                    aH = get_absolute_humidity(temperature, humidity)
+                    print("  aH", aH)
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="InfluxDB Test")
     parser.add_argument('--create-test-data', action='store_true', help="Creates test data. Caution, do not execute when your system is in real use!")
     parser.add_argument('--delete-test-data', action='store_true', help="Delete test data. Caution, do not execute when your system is in real use!")
+    parser.add_argument('--test', action='store_true', help="Temporary test function.")
     args = parser.parse_args()
-    if (args.create_test_data == False) and (args.delete_test_data == False):
+    if (args.create_test_data == False) and (args.delete_test_data == False) and (args.test == False):
         parser.print_help()
     if args.create_test_data:
         create_test_data()
     if args.delete_test_data:
         delete_test_data()
+    if args.test:
+        test()
 
 
 if __name__ == '__main__':
