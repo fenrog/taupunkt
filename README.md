@@ -611,7 +611,7 @@ Erstellen und testweise temporäres Mounten
 cd /media
 sudo mkdir influxdb
 sudo mount /dev/sda1 /media/influxdb
-ls -l /mount/influxdb  # Sollte 'lost+found' listen
+sudo ls -l /media/influxdb  # Sollte 'lost+found' listen
 sudo umount /media/influxdb
 ```
 
@@ -633,14 +633,14 @@ UUID=e959cd31-eea7-4ea7-b5cc-c99761d8e5a5 /media/influxdb ext4 noatime,x-systemd
 fstab testen
 ```
 sudo mount -a
-ls -l /mount/influxdb  # Sollte 'lost+found' listen
+sudo ls -l /media/influxdb  # Sollte 'lost+found' listen
 ```
 
 Test ob nach einem Reboot das Laufwerk vorhanden ist
 ```
 sudo reboot
 # nach reboot
-ls -l /mount/influxdb  # Sollte 'lost+found' listen
+sudo ls -l /media/influxdb  # Sollte 'lost+found' listen
 ```
 
 [^24]: https://linuxize.com/post/how-to-format-usb-sd-card-linux/
