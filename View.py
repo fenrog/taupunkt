@@ -128,19 +128,6 @@ class View(threading.Thread):
         for i in range(len(text)):
             self.line1[3+i] = text[i]
 
-    def on_change_errors(self, errors):
-        if errors:
-            text = "E:"
-            for key in ["ext", "NO", "SO", "SW", "NW", "Rn"]:
-                if key in errors:
-                    text += "{} ".format(key)
-                else:
-                    text += " " * (len(key) + 1)
-        else:
-            text = " " * 20
-        for i in range(20):
-            self.line2[i] = text[i]
-
     def on_change_temperature(self, temperature, line):
         if temperature is None:
             text = "-----"
@@ -148,15 +135,6 @@ class View(threading.Thread):
             text = "{:+5.1f}".format(temperature)
         for i in range(len(text)):
             line[i] = text[i]
-
-    def on_change_room_temperature(self, temperature):
-        self.on_change_temperature(temperature, self.line2)
-
-    def on_change_internal_temperature(self, temperature):
-        self.on_change_temperature(temperature, self.line3)
-
-    def on_change_external_temperature(self, temperature):
-        self.on_change_temperature(temperature, self.line4)
 
     def on_change_humidity(self, humidity, line):
         if humidity is None:
@@ -166,15 +144,6 @@ class View(threading.Thread):
         for i in range(len(text)):
             line[6+i] = text[i]
 
-    def on_change_room_humidity(self, humidity):
-        self.on_change_humidity(humidity, self.line2)
-
-    def on_change_internal_humidity(self, humidity):
-        self.on_change_humidity(humidity, self.line3)
-
-    def on_change_external_humidity(self, humidity):
-        self.on_change_humidity(humidity, self.line4)
-
     def on_change_dewpoint(self, dewpoint, line):
         if dewpoint is None:
             text = "-----"
@@ -182,15 +151,6 @@ class View(threading.Thread):
             text = "{:+5.1f}".format(dewpoint)
         for i in range(len(text)):
             line[12+i] = text[i]
-
-    def on_change_room_dewpoint(self, dewpoint):
-        self.on_change_dewpoint(dewpoint, self.line2)
-
-    def on_change_internal_dewpoint(self, dewpoint):
-        self.on_change_dewpoint(dewpoint, self.line3)
-
-    def on_change_external_dewpoint(self, dewpoint):
-        self.on_change_dewpoint(dewpoint, self.line4)
 
     def on_change_location(self, key, line):
         if (type(key) == str) and (2 == len(key)):
@@ -200,11 +160,26 @@ class View(threading.Thread):
         for i in range(len(text)):
             line[18+i] = text[i]
 
-    def on_change_room_location(self, key):
-        self.on_change_location(key, self.line2)
+    def on_change_north(self, temperature, humidity, dewpoint, location):
+        self.on_change_temperature(temperature, self.line2)
+        self.on_change_humidity(humidity, self.line2)
+        self.on_change_dewpoint(dewpoint, self.line2)
+        self.on_change_location(location, self.line2)
 
-    def on_change_internal_location(self, key):
-        self.on_change_location(key, self.line3)
+    def on_change_south(self, temperature, humidity, dewpoint, location):
+        self.on_change_temperature(temperature, self.line3)
+        self.on_change_humidity(humidity, self.line3)
+        self.on_change_dewpoint(dewpoint, self.line3)
+        self.on_change_location(location, self.line3)
+
+    def on_change_external_temperature(self, temperature):
+        self.on_change_temperature(temperature, self.line4)
+
+    def on_change_external_humidity(self, humidity):
+        self.on_change_humidity(humidity, self.line4)
+
+    def on_change_external_dewpoint(self, dewpoint):
+        self.on_change_dewpoint(dewpoint, self.line4)
 
     def on_change_switches(self, switches):
         self.line4[18] = ">" if switches["in_fan_on"] else "|"
@@ -277,17 +252,19 @@ if __name__ == '__main__':
             time.sleep(1)
             view.on_change_radon(321)  # valid
             time.sleep(1)
-            view.on_change_internal_temperature(+22.2) # valid
+            view.on_change_north(+22.2, 22, -2.2, "NW") # valid
+            view.on_change_south(-33, 33, -3.3, "SW") # None
             time.sleep(1)
-            view.on_change_internal_temperature(None) # None
+            view.on_change_north(None, None, None, "NO") # None
+            view.on_change_south(None, None, None, "SO") # valid
             time.sleep(1)
-            view.on_change_internal_temperature(-1.1) # valid
-            time.sleep(1)
-            view.on_change_external_temperature(+3.3) # valid
+            view.on_change_external_temperature(+44.4) # valid
+            view.on_change_external_humidity(44) # valid
+            view.on_change_external_dewpoint(-4.4) # valid
             time.sleep(1)
             view.on_change_external_temperature(None) # None
-            time.sleep(1)
-            view.on_change_external_temperature(-15.0) # valid
+            view.on_change_external_humidity(None) # valid
+            view.on_change_external_dewpoint(None) # valid
             time.sleep(1)
     except KeyboardInterrupt:
         view.stop()
