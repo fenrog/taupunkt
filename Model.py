@@ -51,6 +51,7 @@ Optional in future:
 
 import time
 from Database import Database
+from Formulas import get_lim, get_absolute_humidity
 
 
 RADON_BQ_FAN_ON = 150  # if the Radon Bq value is >= this limit, the ventilation shall start (if other conditons allow)
@@ -85,7 +86,7 @@ class Model():
         self.internal = {"temperature": None, "humidity": None, "dewpoint": None, "error": None, "key": None}
         self.external = {"temperature": None, "humidity": None, "dewpoint": None, "error": None}
         self.communication_errors = ["ext", "NO", "SO", "SW", "NW"]
-        self.time_key_index = -1
+        self.show_west = True
         self.ventilation = {
             "radon_request": None,
             "humidity_request": None,
@@ -103,19 +104,24 @@ class Model():
         self.t_next_write = None  # next time to write ventilatoin and switches to the db, at last once a minute
 
     def on_time(self):
-        if (not self.communication_errors) and (not self.radon["error"]):
-            # there is no error present, show temperature/humidity/dewpoint of the non active internal room
-            keys = ["NO", "SO", "SW", "NW"]
-            self.time_key_index = (self.time_key_index + 1) % len(keys)
-            key = keys[self.time_key_index]
-            if key == self.internal["key"]:
-                self.time_key_index = (self.time_key_index + 1) % len(keys)
-                key = keys[self.time_key_index]
-
-            self.view.on_change_room_temperature(self.dewpoints[key]["temperature"])
-            self.view.on_change_room_humidity(self.dewpoints[key]["humidity"])
-            self.view.on_change_room_dewpoint(self.dewpoints[key]["dewpoint"])
-            self.view.on_change_room_location(key)
+        if self.show_west:
+            north = "NW"
+            south = "SW"
+            self.show_west = False
+        else:
+            north = "NO"
+            south = "SO"
+            self.show_west = True
+        self.view.on_change_north(
+            self.dewpoints[north]["temperature"],
+            self.dewpoints[north]["humidity"],
+            self.dewpoints[north]["dewpoint"],
+            north)
+        self.view.on_change_south(
+            self.dewpoints[south]["temperature"],
+            self.dewpoints[south]["humidity"],
+            self.dewpoints[south]["dewpoint"],
+            south)
         if self.t_next_write is not None:
             # at east one time ventilation and swicthes have been calculated
             if time.time() >= self.t_next_write:
@@ -130,7 +136,6 @@ class Model():
             self.view.on_change_radon(Bq)
         if self.radon["error"] != error:
             self.radon["error"] = error
-            self.on_change_errors()
 
         radon_request = self.ventilation["radon_request"]  # default for hyteresis
         if error:                                          # error handling
@@ -153,11 +158,21 @@ class Model():
         max_internal_dewpoint = None
         communication_errors = []
         for key in averaged:
+            temperature = averaged[key]["temperature"]
+            rH = averaged[key]["humidity"]
+            aH = None
+            lim = None
+            if temperature is not None:
+                lim = get_lim(temperature)
+                if rH is not None:
+                    aH = get_absolute_humidity(temperature, rH)
             self.db.write_DHT22(  # will be written every 20 seconds due to Dewpoint module
                 key=key,
-                temperature=averaged[key]["temperature"],
-                humidity=averaged[key]["humidity"],
+                temperature=temperature,
+                rH=rH,
                 dewpoint=averaged[key]["dewpoint"],
+                aH=aH,
+                lim=lim,
                 error=averaged[key]["error"],
             )
             if averaged[key]["dewpoint"] is not None:  # if dewpoint is present, also temperature and humidity are present
@@ -238,13 +253,10 @@ class Model():
             self.on_change_ventilation()
 
         # view only relevant changes
-        if "key" in diff_internal:
-            self.on_change_internal_location(self.internal["key"])
         if "humidity" in diff_external:
             self.on_change_external_humidity(self.external["humidity"])
 
     def on_change_internal_humidity(self, internal_humidity):
-        self.view.on_change_internal_humidity(internal_humidity)
         humidity_request = self.ventilation["humidity_request"]         # default for hyteresis
         if internal_humidity is None:                                   # error handling
             humidity_request = False
@@ -260,7 +272,6 @@ class Model():
         return ventilation_is_changed
 
     def on_change_dewpoint(self, internal_dewpoint, external_dewpoint):
-        self.view.on_change_internal_dewpoint(internal_dewpoint)
         self.view.on_change_external_dewpoint(external_dewpoint)
         dewpoint_granted = self.ventilation["dewpoint_granted"]         # default for hyteresis
         if (internal_dewpoint is None) or (external_dewpoint is None):  # error handling
@@ -279,7 +290,6 @@ class Model():
         return ventilation_is_changed
 
     def on_change_internal_temperature(self, internal_temperature):
-        self.view.on_change_internal_temperature(internal_temperature)
         internal_temp_granted = self.ventilation["internal_temp_granted"]  # default for hysteresis
         if internal_temperature is None:                                   # error handling
             internal_temp_granted = False
@@ -354,9 +364,6 @@ class Model():
             self.db.write_switches(self.switches)
             self.view.on_change_switches(self.switches)
 
-    def on_change_internal_location(self, location):
-        self.view.on_change_internal_location(location)
-
     def on_change_external_humidity(self, external_humidity):
         self.view.on_change_external_humidity(external_humidity)
 
@@ -364,13 +371,6 @@ class Model():
         if self.verbose:
             if self.communication_errors:
                 print("communication_errors", self.communication_errors)
-        self.on_change_errors()
-
-    def on_change_errors(self):
-        if self.radon["error"]:
-            self.view.on_change_errors(self.communication_errors + ["Rn"])
-        else:
-            self.view.on_change_errors(self.communication_errors)
 
 def main():
     model = Model(verbose=True)
