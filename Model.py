@@ -51,6 +51,7 @@ Optional in future:
 
 import time
 from Database import Database
+from Formulas import get_lim, get_absolute_humidity
 
 
 RADON_BQ_FAN_ON = 150  # if the Radon Bq value is >= this limit, the ventilation shall start (if other conditons allow)
@@ -103,25 +104,24 @@ class Model():
         self.t_next_write = None  # next time to write ventilatoin and switches to the db, at last once a minute
 
     def on_time(self):
-        if (not self.communication_errors) and (not self.radon["error"]):
-            if self.show_west:
-                north = "NW"
-                south = "SW"
-                self.show_west = False
-            else:
-                north = "NO"
-                south = "SO"
-                self.show_west = True
-            self.view.on_change_north(
-                self.dewpoints[north]["temperature"],
-                self.dewpoints[north]["humidity"],
-                self.dewpoints[north]["dewpoint"],
-                north)
-            self.view.on_change_south(
-                self.dewpoints[south]["temperature"],
-                self.dewpoints[south]["humidity"],
-                self.dewpoints[south]["dewpoint"],
-                south)
+        if self.show_west:
+            north = "NW"
+            south = "SW"
+            self.show_west = False
+        else:
+            north = "NO"
+            south = "SO"
+            self.show_west = True
+        self.view.on_change_north(
+            self.dewpoints[north]["temperature"],
+            self.dewpoints[north]["humidity"],
+            self.dewpoints[north]["dewpoint"],
+            north)
+        self.view.on_change_south(
+            self.dewpoints[south]["temperature"],
+            self.dewpoints[south]["humidity"],
+            self.dewpoints[south]["dewpoint"],
+            south)
         if self.t_next_write is not None:
             # at east one time ventilation and swicthes have been calculated
             if time.time() >= self.t_next_write:
@@ -158,11 +158,21 @@ class Model():
         max_internal_dewpoint = None
         communication_errors = []
         for key in averaged:
+            temperature = averaged[key]["temperature"]
+            rH = averaged[key]["humidity"]
+            aH = None
+            lim = None
+            if temperature is not None:
+                lim = get_lim(temperature)
+                if rH is not None:
+                    aH = get_absolute_humidity(temperature, rH)
             self.db.write_DHT22(  # will be written every 20 seconds due to Dewpoint module
                 key=key,
-                temperature=averaged[key]["temperature"],
-                humidity=averaged[key]["humidity"],
+                temperature=temperature,
+                rH=rH,
                 dewpoint=averaged[key]["dewpoint"],
+                aH=aH,
+                lim=lim,
                 error=averaged[key]["error"],
             )
             if averaged[key]["dewpoint"] is not None:  # if dewpoint is present, also temperature and humidity are present

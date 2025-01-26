@@ -9,6 +9,7 @@ from Formulas import get_lim, get_absolute_humidity
 
 
 POINTS_FILE = r"/home/taupunkt/points.txt"
+EXPORT_FILE = r"/home/taupunkt/points-export.txt"
 
 
 def x2float(x):
@@ -34,24 +35,103 @@ class Database():
         self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
         self.query_api = self.client.query_api()
 
-    def write_DHT22(self, key, temperature, humidity, dewpoint, error):
+    def write_DHT22(self, key, temperature, rH, dewpoint, aH, lim, error):
         point = (
             Point("DHT22")
             .tag("key", key)
             .field("temperature", x2float(temperature))
-            .field("humidity", x2float(humidity))
+            .field("rH", x2float(rH))
             .field("dewpoint", x2float(dewpoint))
+            .field("aH", x2float(aH))
+            .field("lim", x2float(lim))
             .field("error", True if error else False)
+            .time(datetime.now(timezone.utc).replace(microsecond=0))
         )
         self.write_point(point=point, time_precission="s")
+
+    def export_DHT22(self):
+        format = "%Y-%m-%dT%H:%M:%S.%fZ"
+        start = datetime.fromtimestamp(0).strftime(format)
+        query = f'from(bucket:"taupunkt_bucket")\
+|> range(start: {start})\
+|> filter(fn:(r) => r._measurement == "DHT22")\
+|> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")\
+'
+        tables = self.query_api.query(query)
+        with open(EXPORT_FILE, "a") as f:
+            for table in tables:
+                for record in table.records:
+                    # old format
+                    if "humidity" in record.values:
+                        humidity = record.values["humidity"]
+                    else:
+                        humidity = None
+
+                    # new format
+                    if "rH" in record.values:
+                        rH = record.values["rH"]
+                    else:
+                        rH = None
+
+                    # select the right one
+                    if (rH is None) and (humidity is not None):
+                        rH = humidity
+
+                    temperature = record.values["temperature"]
+                    lim = None
+                    aH = None
+                    if temperature is not None:
+                        lim = get_lim(temperature)
+                        if rH is not None:
+                            aH = get_absolute_humidity(temperature, rH)
+
+                    point = '{},key={} '.format(
+                        record.values["_measurement"],
+                        record.values["key"]
+                    )
+                    if temperature is not None:
+                        point += 'temperature={},'.format(temperature)
+                    if rH is not None:
+                        point += 'rH={},'.format(rH)
+                    if record.values["dewpoint"] is not None:
+                        point += 'dewpoint={},'.format(record.values["dewpoint"])
+                    if aH is not None:
+                        point += 'aH={},'.format(aH)
+                    if lim is not None:
+                        point += 'lim={},'.format(lim)
+                    point += 'error={}'.format(True if record.values["error"] else False)
+                    point += ' {}\n'.format(int(record.values["_time"].timestamp()))
+                    f.write(point)
 
     def write_RD200(self, radon, error):
         point = (
             Point("RD200")
             .field("radon", x2float(radon))
             .field("error", True if error else False)
+            .time(datetime.now(timezone.utc).replace(microsecond=0))
         )
         self.write_point(point=point, time_precission="m")
+
+    def export_RD200(self):
+        format = "%Y-%m-%dT%H:%M:%S.%fZ"
+        start = datetime.fromtimestamp(0).strftime(format)
+        query = f'from(bucket:"taupunkt_bucket")\
+|> range(start: {start})\
+|> filter(fn:(r) => r._measurement == "RD200")\
+|> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")\
+'
+        tables = self.query_api.query(query)
+        with open(EXPORT_FILE, "a") as f:
+            for table in tables:
+                for record in table.records:
+                    point = '{} '.format(
+                        record.values["_measurement"],
+                    )
+                    if record.values["radon"] is not None:
+                        point += 'radon={},'.format(record.values["radon"])
+                    point += 'error={}'.format(True if record.values["error"] else False)
+                    point += ' {}\n'.format(int(record.values["_time"].timestamp()))
+                    f.write(point)
 
     def write_ventilation(self, ventilation):
         point = (
@@ -61,22 +141,68 @@ class Database():
             .field("dewpoint_granted", True if ventilation["dewpoint_granted"] else False)
             .field("internal_temp_granted", True if ventilation["internal_temp_granted"] else False)
             .field("external_temp_granted", True if ventilation["external_temp_granted"] else False)
+            .time(datetime.now(timezone.utc).replace(microsecond=0))
         )
         self.write_point(point=point, time_precission="s")
+
+    def export_ventilation(self):
+        format = "%Y-%m-%dT%H:%M:%S.%fZ"
+        start = datetime.fromtimestamp(0).strftime(format)
+        query = f'from(bucket:"taupunkt_bucket")\
+|> range(start: {start})\
+|> filter(fn:(r) => r._measurement == "ventilation")\
+|> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")\
+'
+        tables = self.query_api.query(query)
+        with open(EXPORT_FILE, "a") as f:
+            for table in tables:
+                for record in table.records:
+                    point = '{} '.format(
+                        record.values["_measurement"],
+                    )
+                    point += 'radon_request={},'.format(True if record.values["radon_request"] else False)
+                    point += 'humidity_request={},'.format(True if record.values["humidity_request"] else False)
+                    point += 'dewpoint_granted={},'.format(True if record.values["dewpoint_granted"] else False)
+                    point += 'internal_temp_granted={},'.format(True if record.values["internal_temp_granted"] else False)
+                    point += 'external_temp_granted={}'.format(True if record.values["external_temp_granted"] else False)
+                    point += ' {}\n'.format(int(record.values["_time"].timestamp()))
+                    f.write(point)
 
     def write_switches(self, switches):
         point = (
             Point("switches")
             .field("out_fan_on", True if switches["out_fan_on"] else False)
             .field("in_fan_on", True if switches["in_fan_on"] else False)
+            .time(datetime.now(timezone.utc).replace(microsecond=0))
         )
         self.write_point(point=point, time_precission="s")
 
+    def export_switches(self):
+        format = "%Y-%m-%dT%H:%M:%S.%fZ"
+        start = datetime.fromtimestamp(0).strftime(format)
+        query = f'from(bucket:"taupunkt_bucket")\
+|> range(start: {start})\
+|> filter(fn:(r) => r._measurement == "switches")\
+|> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")\
+'
+        tables = self.query_api.query(query)
+        with open(EXPORT_FILE, "a") as f:
+            for table in tables:
+                for record in table.records:
+                    point = '{} '.format(
+                        record.values["_measurement"],
+                    )
+                    point += 'out_fan_on={},'.format(True if record.values["out_fan_on"] else False)
+                    point += 'in_fan_on={}'.format(True if record.values["in_fan_on"] else False)
+                    point += ' {}\n'.format(int(record.values["_time"].timestamp()))
+                    f.write(point)
+
     def backup_point(self, point):
         with open(POINTS_FILE, "a") as f:
-            f.write("{} {}\n".format(point, int(datetime.now(timezone.utc).timestamp())))
+            f.write("{}\n".format(point))
 
     def write_point(self, point, time_precission):
+        print(point)
         try:
             self.write_api.write(bucket=self.bucket, org=self.org, record=point, write_precision=WritePrecision.S, time_precission=time_precission)
             self.rewrite_points() # it worked, check whether there is something to rewrite
@@ -107,7 +233,7 @@ class Database():
                         points.append(line.strip())
             for point in points:
                 if not self.rewrite_point(point):
-                    failed.append(points)
+                    failed.append(point)
             if failed:
                 print("ERROR: These could not be written")
                 with open(POINTS_FILE, "W") as f:
@@ -120,15 +246,18 @@ class Database():
                 except Exception as e:
                     print(e)
 
-    def test(self):
-        query = 'from(bucket:"taupunkt_bucket")\
-|> range(start: -1m)\
-|> filter(fn:(r) => r._measurement == "DHT22")\
-|> filter(fn:(r) => r.key == "NO")\
-|> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")\
-'
-        tables = self.query_api.query(query)
-        return tables
+    def import_all(self):
+        if os.path.isfile(EXPORT_FILE):
+            with open(POINTS_FILE, "a") as f_out:
+                with open(EXPORT_FILE, 'r') as f_in:
+                    lines = f_in.readlines(10)
+                    while lines:
+                        for line in lines:
+                            point = line.strip()
+                            if point:
+                                if not self.rewrite_point(point):
+                                    f_out.write("{}\n".format(point))
+                        lines = f_in.readlines(10)
 
 
 def create_test_data():
@@ -143,9 +272,9 @@ def create_test_data():
         offset = 0
         for key in ["ext", "NO", "SO", "SW", "NW"]:
             if error:
-                db.write_DHT22(key=key, temperature=None, humidity=None, dewpoint=None, error=error)
+                db.write_DHT22(key=key, temperature=None, rH=None, dewpoint=None, aH=None, lim=None, error=error)
             else:
-                db.write_DHT22(key=key, temperature=20+i+offset, humidity=50+i+offset, dewpoint=10+i+offset, error=error)
+                db.write_DHT22(key=key, temperature=20+i+offset, rH=50+i+offset, dewpoint=10+i+offset, aH=10+i+offset, lim=30+i+offset, error=error)
         if 0 == i % 3:
             if error:
                 db.write_RD200(radon=200+i, error=error)
@@ -178,8 +307,8 @@ def delete_test_data():
     else:
         sys.exit("token file '{}' missing".format(token_file))
 
-    format = "%Y-%m-%dT%H:%M:%S.%dZ"
-    start = datetime.fromtimestamp(0).strftime(format)
+    format = "%Y-%m-%dT%H:%M:%S.%fZ"
+    start = "1900-01-01T00:00:00.000Z"
     stop = datetime.now(timezone.utc).strftime(format)
     stop = "2025-01-17T14:42:00Z"
     command = f"influx delete --bucket taupunkt_bucket --start {start} --stop {stop} --org taupunkt_org --token {token}".split()
@@ -190,23 +319,19 @@ def delete_test_data():
         print(result.stderr.decode(sys.stderr.encoding))
 
 
-def test():
+def export_bucket():
+    if os.path.isfile(EXPORT_FILE):
+        os.remove(EXPORT_FILE)
     db = Database()
-    tables = db.test()
-    for table in tables:
-        for record in table.records:
-            print(type(record.values))
-            for (k, v) in record.values.items():
-                print(" ", k, v)
-            if record.values["error"] == False:
-                temperature = record.values["temperature"]
-                humidity = record.values["humidity"]
-                if "lim" not in record.values:
-                    lim = get_lim(temperature)
-                    print("  lim", lim)
-                if "aH" not in record.values:
-                    aH = get_absolute_humidity(temperature, humidity)
-                    print("  aH", aH)
+    db.export_DHT22()
+    db.export_RD200()
+    db.export_ventilation()
+    db.export_switches()
+
+
+def import_bucket():
+    db = Database()
+    db.import_all()
 
 
 def main():
@@ -214,16 +339,19 @@ def main():
     parser = argparse.ArgumentParser(description="InfluxDB Test")
     parser.add_argument('--create-test-data', action='store_true', help="Creates test data. Caution, do not execute when your system is in real use!")
     parser.add_argument('--delete-test-data', action='store_true', help="Delete test data. Caution, do not execute when your system is in real use!")
-    parser.add_argument('--test', action='store_true', help="Temporary test function.")
+    parser.add_argument('--export-bucket', action='store_true', help="export bucket (old format and enhance with aH and lim).")
+    parser.add_argument('--import-bucket', action='store_true', help="import bucket (delete and re-create taupunkt_bucket before execution)")
     args = parser.parse_args()
-    if (args.create_test_data == False) and (args.delete_test_data == False) and (args.test == False):
+    if (args.create_test_data == False) and (args.delete_test_data == False) and (args.export_bucket == False) and (args.import_bucket == False):
         parser.print_help()
     if args.create_test_data:
         create_test_data()
     if args.delete_test_data:
         delete_test_data()
-    if args.test:
-        test()
+    if args.export_bucket:
+        export_bucket()
+    if args.import_bucket:
+        import_bucket()
 
 
 if __name__ == '__main__':
