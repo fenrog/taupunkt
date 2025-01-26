@@ -181,6 +181,7 @@ def delete_test_data():
     format = "%Y-%m-%dT%H:%M:%S.%dZ"
     start = datetime.fromtimestamp(0).strftime(format)
     stop = datetime.now(timezone.utc).strftime(format)
+    stop = "2025-01-17T14:42:00Z"
     command = f"influx delete --bucket taupunkt_bucket --start {start} --stop {stop} --org taupunkt_org --token {token}".split()
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.stdout:
