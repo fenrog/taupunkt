@@ -50,7 +50,7 @@ class View(threading.Thread):
         self.switch = Switch(2229972, 2229970)
         # column numbers          01234567890123456789
         self.line1 = [c for c in "Bq nnnn DD.MON HH:MM"]
-        self.line2 = [c for c in "E:xxx xx xx xx xx xx"]
+        self.line2 = [c for c in "+tt.t aa.a% +tt.t XX"]
         self.line3 = [c for c in "+tt.t aa.a% +tt.t XX"]
         self.line4 = [c for c in "+tt.t aa.a% +tt.t ie"]
 
