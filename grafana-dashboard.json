@@ -18,13 +18,13 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 1,
+  "id": 7,
   "links": [],
   "panels": [
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "feb4z70j8l1q8b"
+        "uid": "fe95k72rmj1fkf"
       },
       "description": "Temperatur aller 5 Sensoren",
       "fieldConfig": {
@@ -350,7 +350,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "feb4z70j8l1q8b"
+        "uid": "fe95k72rmj1fkf"
       },
       "description": "Radon Strahlung in Bq/m³",
       "fieldConfig": {
@@ -478,7 +478,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "feb4z70j8l1q8b"
+        "uid": "fe95k72rmj1fkf"
       },
       "description": "relative Luftfeuchtigkeit aller 5 Sensoren",
       "fieldConfig": {
@@ -804,7 +804,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "feb4z70j8l1q8b"
+        "uid": "fe95k72rmj1fkf"
       },
       "description": "- relative Luftfeuchtigkeit aller 5 Sensoren\n- Limit für Wachstum gesundheitsgefährdenden Schimmels",
       "fieldConfig": {
@@ -1461,7 +1461,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "feb4z70j8l1q8b"
+        "uid": "fe95k72rmj1fkf"
       },
       "description": "relative Luftfeuchtigkeit aller 5 Sensoren",
       "fieldConfig": {
@@ -1787,7 +1787,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "feb4z70j8l1q8b"
+        "uid": "fe95k72rmj1fkf"
       },
       "description": "Fehler aller Sensoren",
       "fieldConfig": {
@@ -2027,6 +2027,8 @@
           "measurement": "RD200",
           "orderByTime": "ASC",
           "policy": "default",
+          "query": "SELECT \"error\" FROM \"RD200\" WHERE $timeFilter",
+          "rawQuery": false,
           "refId": "F",
           "resultFormat": "time_series",
           "select": [
@@ -2048,7 +2050,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "feb4z70j8l1q8b"
+        "uid": "fe95k72rmj1fkf"
       },
       "description": "Taupunkte aller 5 Sensoren",
       "fieldConfig": {
@@ -2374,7 +2376,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "feb4z70j8l1q8b"
+        "uid": "fe95k72rmj1fkf"
       },
       "description": "",
       "fieldConfig": {
@@ -2616,7 +2618,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "feb4z70j8l1q8b"
+        "uid": "fe95k72rmj1fkf"
       },
       "fieldConfig": {
         "defaults": {
@@ -2884,7 +2886,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "feb4z70j8l1q8b"
+        "uid": "fe95k72rmj1fkf"
       },
       "fieldConfig": {
         "defaults": {
@@ -3155,7 +3157,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "feb4z70j8l1q8b"
+        "uid": "fe95k72rmj1fkf"
       },
       "fieldConfig": {
         "defaults": {
@@ -3426,13 +3428,13 @@
     "list": []
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-2d",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Taupunkt",
   "uid": "de96bc753nxfkb",
-  "version": 6,
+  "version": 13,
   "weekStart": ""
 }
