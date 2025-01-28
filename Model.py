@@ -61,7 +61,7 @@ HUMIDITY_FAN_ON =  65  # if the relative humidity is >= this limit, the ventilat
 HUMIDITY_FAN_OFF = 55  # if the relative humidity is <= this limit, the ventilation shall stop
 
 DEWPOINT_FAN_ON =   3  # if the dewpoint difference is >= this limit, the ventilation may start (if other conditons allow)
-DEWPOINT_FAN_OFF =  1  # if the dewpoint difference is <= this limit, the ventilation has to stop
+DEWPOINT_FAN_OFF =  0  # if the dewpoint difference is <= this limit, the ventilation has to stop
 
 MIN_INTERNAL_TEMP_ON  = 7.6  # ventilation is allowed >= this internal temperature
 MIN_INTERNAL_TEMP_OFF = 7.4  # no ventilation is allowed <= this internal temperature
@@ -83,7 +83,7 @@ class Model():
             "SW": {"temperature": None, "humidity": None, "dewpoint": None, "error": None},
             "NW": {"temperature": None, "humidity": None, "dewpoint": None, "error": None},
         }
-        self.internal = {"temperature": None, "humidity": None, "dewpoint": None, "error": None, "key": None}
+        self.internal = {"temperature": None, "humidity": None, "dewpoint_min": None, "dewpoint_max": None, "error": None, "key": None}
         self.external = {"temperature": None, "humidity": None, "dewpoint": None, "error": None}
         self.communication_errors = ["ext", "NO", "SO", "SW", "NW"]
         self.show_west = True
@@ -202,7 +202,8 @@ class Model():
         internal = {
             "temperature": min_internal_temperature,
             "humidity": max_internal_humidity,
-            "dewpoint": min_internal_dewpoint,
+            "dewpoint_min": min_internal_dewpoint,
+            "dewpoint_max": max_internal_dewpoint,
             "error": min_internal_dewpoint is not None,  # if dewpoint is present, also temperature and humidity are present
             "key": "in",
         }
@@ -243,8 +244,8 @@ class Model():
         ventilation_is_changed = False
         if "humidity" in diff_internal:
             ventilation_is_changed |= self.on_change_internal_humidity(self.internal["humidity"])
-        if ("dewpoint" in diff_internal) or ("dewpoint" in diff_external):
-            ventilation_is_changed |= self.on_change_dewpoint(self.internal["dewpoint"], self.external["dewpoint"])
+        if ("dewpoint_min" in diff_internal) or ("dewpoint_max" in diff_internal) or ("dewpoint" in diff_external):
+            ventilation_is_changed |= self.on_change_dewpoint(self.internal["dewpoint_min"], self.internal["dewpoint_max"], self.external["dewpoint"])
         if "temperature" in diff_internal:
             ventilation_is_changed |= self.on_change_internal_temperature(self.internal["temperature"])
         if "temperature" in diff_external:
@@ -271,16 +272,17 @@ class Model():
             ventilation_is_changed = True
         return ventilation_is_changed
 
-    def on_change_dewpoint(self, internal_dewpoint, external_dewpoint):
+    def on_change_dewpoint(self, internal_dewpoint_min, internal_dewpoint_max, external_dewpoint):
         self.view.on_change_external_dewpoint(external_dewpoint)
         dewpoint_granted = self.ventilation["dewpoint_granted"]         # default for hyteresis
-        if (internal_dewpoint is None) or (external_dewpoint is None):  # error handling
+        if (internal_dewpoint_min is None) or (internal_dewpoint_max is None) or (external_dewpoint is None):  # error handling
             dewpoint_granted = False
         else:
-            diff_dewpoint = internal_dewpoint - external_dewpoint
-            if diff_dewpoint >= DEWPOINT_FAN_ON:                        # hyteresis high
+            diff_dewpoint_max = internal_dewpoint_max - external_dewpoint
+            diff_dewpoint_min = internal_dewpoint_min - external_dewpoint
+            if diff_dewpoint_max >= DEWPOINT_FAN_ON:                    # hyteresis high based on highest dewpoint
                 dewpoint_granted = True
-            if diff_dewpoint <= DEWPOINT_FAN_OFF:                       # hyteresis low
+            if diff_dewpoint_min <= DEWPOINT_FAN_OFF:                   # hyteresis low based on loweest dewpoint
                 dewpoint_granted = False
 
         ventilation_is_changed = False

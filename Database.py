@@ -202,7 +202,6 @@ class Database():
             f.write("{}\n".format(point))
 
     def write_point(self, point, time_precission):
-        print(point)
         try:
             self.write_api.write(bucket=self.bucket, org=self.org, record=point, write_precision=WritePrecision.S, time_precission=time_precission)
             self.rewrite_points() # it worked, check whether there is something to rewrite
