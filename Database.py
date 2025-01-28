@@ -250,14 +250,14 @@ class Database():
         if os.path.isfile(EXPORT_FILE):
             with open(POINTS_FILE, "a") as f_out:
                 with open(EXPORT_FILE, 'r') as f_in:
-                    lines = f_in.readlines(10)
+                    lines = f_in.readlines(1000)
                     while lines:
                         for line in lines:
                             point = line.strip()
                             if point:
                                 if not self.rewrite_point(point):
                                     f_out.write("{}\n".format(point))
-                        lines = f_in.readlines(10)
+                        lines = f_in.readlines(1000)
 
 
 def create_test_data():
