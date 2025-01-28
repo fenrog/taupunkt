@@ -61,7 +61,7 @@ HUMIDITY_FAN_ON =  65  # if the relative humidity is >= this limit, the ventilat
 HUMIDITY_FAN_OFF = 55  # if the relative humidity is <= this limit, the ventilation shall stop
 
 DEWPOINT_FAN_ON =   3  # if the dewpoint difference is >= this limit, the ventilation may start (if other conditons allow)
-DEWPOINT_FAN_OFF =  0  # if the dewpoint difference is <= this limit, the ventilation has to stop
+DEWPOINT_FAN_OFF =  1  # if the dewpoint difference is <= this limit, the ventilation has to stop
 
 MIN_INTERNAL_TEMP_ON  = 7.6  # ventilation is allowed >= this internal temperature
 MIN_INTERNAL_TEMP_OFF = 7.4  # no ventilation is allowed <= this internal temperature
