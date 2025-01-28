@@ -228,8 +228,11 @@ class Database():
             with open(POINTS_FILE, 'r') as f:
                 data = f.read().split('\n')
                 for line in data:
-                    if line.strip():
-                        points.append(line.strip())
+                    line = line.strip()
+                    if line:
+                        if line.endswith("000000000"):
+                            line = line[0:-9]
+                        points.append(line)
             for point in points:
                 if not self.rewrite_point(point):
                     failed.append(point)
