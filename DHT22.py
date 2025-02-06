@@ -19,6 +19,7 @@ Architecture:
 """
 
 from TimeSyncedTimer import TimeSyncedTimer
+import math
 import time
 import json
 import board
@@ -27,6 +28,7 @@ from datetime import datetime, timezone
 
 
 READ_TICK = 20  # read every n seconds
+CONFIG_FILE = r"DHT22.json"
 
 
 def id2pin(id):
@@ -68,8 +70,13 @@ class DHT22():
         self.callback = callback
         self.offset_correction = offset_correction
         self.verbose = verbose
-        with open('DHT22.json') as f:
+        with open(CONFIG_FILE) as f:
             self.config = json.load(f)
+
+        for key in self.config:
+            self.config[key]["offset"] = {float(k): v for k, v in self.config[key]["offset"].items()}
+            for temperature in self.config[key]["offset"]:
+                self.config[key]["offset"][temperature] = {float(k): v for k, v in self.config[key]["offset"][temperature].items()}
 
         # Initial the dht devices, with data pins connected to:
         self.dhtDevice = {}
@@ -78,6 +85,43 @@ class DHT22():
 
         self.timer = TimeSyncedTimer(READ_TICK, self.update_data)
         self.timer.start()
+
+    def get_offset(self, key, temperature, humidity):
+        # temperature range -40 °C .. + 80 °C
+        # humidity range: 0% .. 100%
+        # temperature normalization: t_normalized = (temperature + 40) / (80 - -40) = (temperature + 40) / 120
+        # humidity normalization:    h_normalized = (humidity - 0 ) / (100 - 0) = humidity / 100
+
+        t_offset = 0.0
+        h_offset = 0.0
+
+        if (key in self.config) and ("offset" in self.config[key]):
+            if len(self.config[key]["offset"]):
+                t_delta = +80 - (-40)  # maximum temperature delta
+                h_delta = 100 - 0    # maximum humidity delta
+                max_distance = math.sqrt((t_delta * t_delta) + (h_delta * h_delta))
+                t_index = None
+                h_index = None
+
+                for t in self.config[key]["offset"]:
+                    for h in self.config[key]["offset"][t]:
+                        t_delta = t - temperature
+                        h_delta = h - humidity
+                        distance = math.sqrt((t_delta * t_delta) + (h_delta * h_delta))
+                        if max_distance >= distance:
+                            max_distance = distance
+                            t_index = t
+                            h_index = h
+                if t_index is not None:
+                    t_offset = self.config[key]["offset"][t_index][h_index]["temperature"]
+                    h_offset = self.config[key]["offset"][t_index][h_index]["humidity"]
+            else:
+                print("ERROR: no offsets available")
+                pass
+        else:
+            print("ERROR: no data available, keep default")
+            pass  # no data available, keep default
+        return t_offset, h_offset
 
     def update_data(self):
         data = {}
@@ -96,8 +140,9 @@ class DHT22():
                         raise Exception("Nonsense data, most likely [0x00, 0x00, 0x00, 0x00, 0x00] has been 'received' from a non present sensor at '{key}'")
                     print("{:18.7f} {:3s} {:5.2f}°C {:5.2f}%".format(time.time(), key, data[key]["temperature"], data[key]["humidity"]))
                     if self.offset_correction:
-                        data[key]["temperature"] += self.config[key]["t_offset"]
-                        data[key]["humidity"] += self.config[key]["r_offset"]
+                        t_offset, h_offset = self.get_offset(key, data[key]["temperature"], data[key]["humidity"])
+                        data[key]["temperature"] += t_offset
+                        data[key]["humidity"] += h_offset
                     data[key]["utc"] = datetime.now(timezone.utc)
                     data[key]["error"] = False
                 except Exception as e:
@@ -122,58 +167,72 @@ def train_offsets(minutes):
     READ_TICK = 2   # the sensor or the library (?) updates ervery two seconds
 
     def callback(data):
-        t = 0.0
-        r = 0.0
-        cnt = 0
-        for key in data:
-            if not data[key]["error"]:
-                print("{:3s} {:-4.1f}°C {:-4.1f}%".format(key, data[key]["temperature"], data[key]["humidity"]))
-                t += data[key]["temperature"]
-                r += data[key]["humidity"]
-                cnt += 1
-            else:
-                print("{:3s} error".format(key))
-                errors[key] += 1
+        for k, v in data.items():
+            if v["temperature"] is not None:
+                raw_data[k]["temperature"].append(v["temperature"])
+            if v["humidity"] is not None:
+                raw_data[k]["humidity"].append(v["humidity"])
 
-        if cnt:
-            t_avg = t / cnt  # calculate average
-            r_avg = r / cnt  # calculate average
-            for key in data:
-                if not data[key]["error"]:
-                    deviation_t[key].append(t_avg - data[key]["temperature"])
-                    deviation_r[key].append(r_avg - data[key]["humidity"])
+    with open(CONFIG_FILE) as f:
+        config = json.load(f)
 
-
-    config = {
-        "ext": {"pin": board.D24, "t_offset":0, "r_offset": 0},
-        "NO": {"pin": board.D23, "t_offset":0, "r_offset": 0},
-        "SO": {"pin": board.D25, "t_offset":0, "r_offset": 0},
-        "NW": {"pin": board.D27, "t_offset":0, "r_offset": 0},
-        "SW": {"pin": board.D26, "t_offset":0, "r_offset": 0},
-    }
-    deviation_t = {}
-    deviation_r = {}
-    errors = {}
+    raw_data = {}
+    avg_data = {}
     for key in config:
-        deviation_t[key] = []
-        deviation_r[key] = []
-        errors[key] = 0
+        raw_data[key] = {"temperature": [], "humidity": []}
+        avg_data[key] = {"temperature": None, "humidity": None}
+        if "t_offset" in config[key]:
+            del config[key]["t_offset"]
+        if "r_offset" in config[key]:
+            del config[key]["r_offset"]
+        if "offset" not in config[key]:
+            config[key]["offset"] = {} # two dimensional dict, organized by temperature and humidity
+        config[key]["offset"] = {float(k): v for k, v in config[key]["offset"].items()}
+        for temperature in config[key]["offset"]:
+            config[key]["offset"][temperature] = {float(k): v for k, v in config[key]["offset"][temperature].items()}
 
     dht = DHT22(callback, offset_correction=False, verbose=True)
     time.sleep(minutes * 60)
     dht.exit()
+    time.sleep(READ_TICK + 1)
+
+    sum_t = 0.0
+    sum_h = 0.0
+    cnt = 0
+    for k, v in raw_data.items():
+        min_t = min(v["temperature"])
+        max_t = max(v["temperature"])
+        avg_data[k]["temperature"] = sum(v["temperature"]) / len(v["temperature"])
+        sum_t += avg_data[k]["temperature"]
+        min_h = min(v["humidity"])
+        max_h = max(v["humidity"])
+        avg_data[k]["humidity"] = sum(v["humidity"]) / len(v["humidity"])
+        sum_h += avg_data[k]["humidity"]
+        print(k, "t ", min_t, max_t, avg_data[k]["temperature"], "rH", min_h, max_h, avg_data[k]["humidity"])
+        cnt += 1
+
+    avg_t = sum_t / cnt
+    avg_h = sum_h / cnt
+    print(avg_t, avg_h)
 
     for key in config:
-        if len(deviation_t[key]):
-            config[key]["t_offset"] = sum(deviation_t[key]) / len(deviation_t[key])
-        if len(deviation_r[key]):
-            config[key]["r_offset"] = sum(deviation_r[key]) / len(deviation_r[key])
-        print(key, errors[key], len(deviation_t[key]), len(deviation_r[key]), config[key])
+        avg_t_rounded = round(avg_data[key]["temperature"], 1)
+        avg_h_rounded = round(avg_data[key]["humidity"], 1)
+        if avg_t_rounded not in config[key]["offset"]:
+            config[key]["offset"][avg_t_rounded] = {}
+        config[key]["offset"][avg_t_rounded][avg_h_rounded] = {
+            "temperature": avg_t - avg_data[key]["temperature"],
+            "humidity": avg_h - avg_data[key]["humidity"],
+        }
 
     for key in config:
         config[key]["pin"] = int(str(config[key]["pin"]))
-        print("{} errors {}".format(key, errors[key]))
-    with open('DHT22.json', 'w') as f:
+        config[key]["offset"] = dict(sorted(config[key]["offset"].items()))
+        for temperature in config[key]["offset"]:
+            config[key]["offset"][temperature] = dict(sorted(config[key]["offset"][temperature].items()))
+
+
+    with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
 
     READ_TICK = READ_TICK_BAK
@@ -194,7 +253,7 @@ def demo(minutes):
 
 def main():
 #    train_offsets(1)
-    demo(10)
+    demo(1)
 
 
 if __name__ == '__main__':

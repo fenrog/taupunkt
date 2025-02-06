@@ -25,7 +25,7 @@ def setup():
     global view
     global controller
     signal.signal(signal.SIGINT, signal_handler)
-    print('Terminated with Ctrl+C')
+    print('Terminate with Ctrl+C')
     view = View()
     model = Model(view)
     view.start()
