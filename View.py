@@ -88,6 +88,10 @@ class View(threading.Thread):
             self.lcd.clear()
 
     def update(self):
+        for i in [5, 11, 17]:
+            self.line2[i] = " "
+            self.line3[i] = " "
+            self.line4[i] = " "
         if VARIANT == VARIANT_ADAFRUIT:
             if self.lcd_needs_recovery:
                 self.init_display()
