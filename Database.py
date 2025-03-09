@@ -301,7 +301,6 @@ def create_test_data():
 
 def delete_test_data():
     import subprocess
-    from datetime import datetime, timezone
     token_file=r"/home/taupunkt/influxdb.python.token"
     if os.path.isfile(token_file):
         with open(token_file) as f:
@@ -313,6 +312,33 @@ def delete_test_data():
     start = "1900-01-01T00:00:00.000Z"
     stop = datetime.now(timezone.utc).strftime(format)
     stop = "2025-01-17T14:42:00Z"
+    command = f"influx delete --bucket taupunkt_bucket --start {start} --stop {stop} --org taupunkt_org --token {token}".split()
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.stdout:
+        print(result.stdout.decode(sys.stdout.encoding))
+    if result.stderr:
+        print(result.stderr.decode(sys.stderr.encoding))
+
+
+def delete_minute(timestamp):
+    import subprocess
+    import pytz
+    from datetime import timedelta
+    local = pytz.timezone("Europe/Berlin")
+    local_dt = local.localize(timestamp, is_dst=None)
+    utc_dt = local_dt.astimezone(pytz.utc)
+    start = datetime.strftime(utc_dt, "%Y-%m-%dT%H:%M:%S.000Z")
+    stop = datetime.strftime(utc_dt + timedelta(seconds=60), "%Y-%m-%dT%H:%M:%S.000Z")
+    print("UTC", start)
+    print("UTC", stop)
+
+    token_file=r"/home/taupunkt/influxdb.python.token"
+    if os.path.isfile(token_file):
+        with open(token_file) as f:
+            token = f.read().strip()
+    else:
+        sys.exit("token file '{}' missing".format(token_file))
+
     command = f"influx delete --bucket taupunkt_bucket --start {start} --stop {stop} --org taupunkt_org --token {token}".split()
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.stdout:
@@ -341,18 +367,25 @@ def main():
     parser = argparse.ArgumentParser(description="InfluxDB Test")
     parser.add_argument('--create-test-data', action='store_true', help="Creates test data. Caution, do not execute when your system is in real use!")
     parser.add_argument('--delete-test-data', action='store_true', help="Delete test data. Caution, do not execute when your system is in real use!")
+    parser.add_argument(
+        '--delete-minute',
+        help="Delete data of the given minute. Local time in the format 'dd.mm.yyyy HH:MM:SS'",
+        type=lambda s: datetime.strptime(s, '%Y-%m-%d %H:%M:%S')
+    )
     parser.add_argument('--export-bucket', action='store_true', help="export bucket (old format and enhance with aH and lim).")
     parser.add_argument('--import-bucket', action='store_true', help="import bucket (delete and re-create taupunkt_bucket before execution)")
     args = parser.parse_args()
-    if (args.create_test_data == False) and (args.delete_test_data == False) and (args.export_bucket == False) and (args.import_bucket == False):
+    if (args.create_test_data == False) and (args.delete_test_data == False) and (args.delete_minute is None) and (args.export_bucket == False) and (args.import_bucket == False):
         parser.print_help()
-    if args.create_test_data:
+    elif args.create_test_data:
         create_test_data()
-    if args.delete_test_data:
+    elif args.delete_test_data:
         delete_test_data()
-    if args.export_bucket:
+    elif args.delete_minute:
+        delete_minute(args.delete_minute)
+    elif args.export_bucket:
         export_bucket()
-    if args.import_bucket:
+    elif args.import_bucket:
         import_bucket()
 
 

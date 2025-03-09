@@ -220,6 +220,7 @@ source venv-taupunkt/bin/activate                       # virtuelle Umgebung akt
 pip install --upgrade pip
 pip install setuptools
 pip install wheel
+pip install pytz
 sudo apt install python3-dev
 ```
 
