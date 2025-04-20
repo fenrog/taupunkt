@@ -47,7 +47,9 @@ class View(threading.Thread):
         self.leds = Leds()
         self.leds.red(True)
         self.leds.green(True)
-        self.switch = Switch(2229972, 2229970)
+        self.switch_in_fan = Switch(3017736, 3017732)
+        self.switch_out_fan = Switch(2229972, 2229970)
+        self.switch_heater = Switch(9707848, 9707844)
         # column numbers          01234567890123456789
         self.line1 = [c for c in "Bq nnnn DD.MON HH:MM"]
         self.line2 = [c for c in "+tt.t aa.a% +tt.t XX"]
@@ -188,17 +190,25 @@ class View(threading.Thread):
     def on_change_switches(self, switches):
         self.line4[18] = ">" if switches["in_fan_on"] else "|"
         self.line4[19] = ">" if switches["out_fan_on"] else "|"
-        self.leds.green(switches["out_fan_on"])
-        self.leds.red(not switches["out_fan_on"])
-        if switches["out_fan_on"]:
-            self.switch.on()
+        self.leds.green(switches["in_fan_on"])
+        self.leds.red(not switches["in_fan_on"])
+        if switches["in_fan_on"]:
+            self.switch_in_fan.on()
         else:
-            self.switch.off()
+            self.switch_in_fan.off()
+        if switches["out_fan_on"]:
+            self.switch_out_fan.on()
+        else:
+            self.switch_out_fan.off()
+        if switches["heater_on"]:
+            self.switch_heater.on()
+        else:
+            self.switch_heater.off()
 
     def run(self):
-        # set the switch off
-        self.switch.start()
-        self.switch.off()
+        # switch the out fan off
+        self.switch_out_fan.start()
+        self.switch_out_fan.off()
 
         # Create PCF8574 GPIO adapter.
         if VARIANT == VARIANT_ADAFRUIT:
@@ -242,7 +252,7 @@ class View(threading.Thread):
         self.backlight(False)
         self.leds.red(False)
         self.leds.green(False)
-        self.switch.stop()
+        self.switch_out_fan.stop()
 
 
 if __name__ == '__main__':

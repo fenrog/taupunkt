@@ -93,12 +93,11 @@ class Model():
             "dewpoint_granted": None,
             "internal_temp_granted": None,
             "external_temp_granted": None,
-            "out_fan_granted": True,  # future improvement to read the sensors, but switch allready foreseen
-            "in_fan_request": False,  # future improvement to read the sensors, but switch allready foreseen
         }
         self.switches = {
             "out_fan_on": None,
             "in_fan_on": None,
+            "heater_on": None,
         }
         self.db = Database()
         self.t_next_write = None  # next time to write ventilatoin and switches to the db, at last once a minute
@@ -333,23 +332,17 @@ class Model():
                 # dewpoint difference, internal and exteranl temperatures are above the limits
                 out_fan_on = True
                 in_fan_on = True
+                heater_on = False # TODO: switch the heater depending on the "Fortluft" temperature (less than 2°C -> heater on)
             else:
                 # at minimum one of dewpoint difference, internal or exteranl temperatures is below the limits
                 out_fan_on = False
                 in_fan_on = False
+                heater_on = False
         else:
             # no request by neitehr radon nor humidity
             out_fan_on = False
             in_fan_on = False
-
-        # if the differential preassure monitor signals out_fan_off, both fans are off (if not overruled by "in_fan_request")
-        if not self.ventilation["out_fan_granted"]:
-            out_fan_on = False
-            in_fan_on = False
-
-        # prevent danger of pulling exhaust gasses through the chimney, in fan request overrules everything
-        if self.ventilation["in_fan_request"]:
-            in_fan_on = True
+            heater_on = False
 
         # calculate changes for power switch settings
         switches_changed = False
@@ -358,6 +351,9 @@ class Model():
             switches_changed = True
         if self.switches["in_fan_on"] != in_fan_on:
             self.switches["in_fan_on"] = in_fan_on
+            switches_changed = True
+        if self.switches["heater_on"] != heater_on:
+            self.switches["heater_on"] = heater_on
             switches_changed = True
         if self.verbose:
             print(self.ventilation)

@@ -173,6 +173,7 @@ class Database():
             Point("switches")
             .field("out_fan_on", True if switches["out_fan_on"] else False)
             .field("in_fan_on", True if switches["in_fan_on"] else False)
+            .field("heater_on", True if switches["heater_on"] else False)
             .time(datetime.now(timezone.utc).replace(microsecond=0))
         )
         self.write_point(point=point, time_precission="s")
@@ -194,6 +195,7 @@ class Database():
                     )
                     point += 'out_fan_on={},'.format(True if record.values["out_fan_on"] else False)
                     point += 'in_fan_on={}'.format(True if record.values["in_fan_on"] else False)
+                    point += 'heater_on={}'.format(True if record.values["heater_on"] else False)
                     point += ' {}\n'.format(int(record.values["_time"].timestamp()))
                     f.write(point)
 
@@ -294,6 +296,7 @@ def create_test_data():
         db.write_switches({
             "out_fan_on": toggle,
             "in_fan_on": toggle,
+            "heater_on": toggle,
         })
         toggle = not toggle
         time.sleep(20)
