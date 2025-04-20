@@ -57,8 +57,8 @@ from Formulas import get_lim, get_absolute_humidity
 RADON_BQ_FAN_ON = 150  # if the Radon Bq value is >= this limit, the ventilation shall start (if other conditons allow)
 RADON_BQ_FAN_OFF = 75  # if the Radon Bq value is <= this limit, the ventilation shall stop
 
-HUMIDITY_FAN_ON =  65  # if the relative humidity is >= this limit, the ventilation shall start (if other conditons allow)
-HUMIDITY_FAN_OFF = 55  # if the relative humidity is <= this limit, the ventilation shall stop
+HUMIDITY_FAN_ON =  67.5  # if the relative humidity is >= this limit, the ventilation shall start (if other conditons allow)
+HUMIDITY_FAN_OFF = 62.5  # if the relative humidity is <= this limit, the ventilation shall stop
 
 DEWPOINT_FAN_ON =   3  # if the dewpoint difference is >= this limit, the ventilation may start (if other conditons allow)
 DEWPOINT_FAN_OFF =  1  # if the dewpoint difference is <= this limit, the ventilation has to stop
