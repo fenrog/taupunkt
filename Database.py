@@ -369,7 +369,7 @@ def main():
     parser.add_argument('--delete-test-data', action='store_true', help="Delete test data. Caution, do not execute when your system is in real use!")
     parser.add_argument(
         '--delete-minute',
-        help="Delete data of the given minute. Local time in the format 'dd.mm.yyyy HH:MM:SS'",
+        help="Delete data of the given minute. Local time in the format 'yyyy-mm-dd HH:MM:SS'",
         type=lambda s: datetime.strptime(s, '%Y-%m-%d %H:%M:%S')
     )
     parser.add_argument('--export-bucket', action='store_true', help="export bucket (old format and enhance with aH and lim).")
