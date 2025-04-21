@@ -115,7 +115,7 @@ class Switch(threading.Thread):
 
             t_sleep = self.t_next_transmission - time.time()
             if t_sleep > 0.1:
-                t_sleep = 0.1  # do not wait longer than one second in order to stop asap
+                t_sleep = 0.1  # do not wait longer than 100 ms in order to transmit or stop asap
             if t_sleep < 0:
                t_sleep = 0  # avoid exception due to negative time
             time.sleep(t_sleep)
