@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-The module delivers the averaged temperature and relative humidityof the external sensor and teh group of teh internal sensors.
+The module delivers the averaged temperature and relative humidity of the external sensor and the group of the internal sensors.
 
 Responsibility:
 - for each DHT22 sensor:

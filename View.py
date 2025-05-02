@@ -51,10 +51,13 @@ class View(threading.Thread):
         self.switch_out_fan = Switch(2229972, 2229970)
         self.switch_heater = Switch(9707848, 9707844)
         # column numbers          01234567890123456789
-        self.line1 = [c for c in "Bq nnnn DD.MON HH:MM"]
+        self.line1 = [c for c in "Bq nnnn DD MON HH:MM"]
         self.line2 = [c for c in "+tt.t aa.a% +tt.t XX"]
         self.line3 = [c for c in "+tt.t aa.a% +tt.t XX"]
-        self.line4 = [c for c in "+tt.t aa.a% +tt.t ie"]
+        self.line4 = [c for c in "+tt.t aa.a% +tt.t <>"]
+        self.air_stream_on = False
+        self.communication_error = True
+        self.communication_error_led_toggle = True
 
     def backlight(self, on):
         if VARIANT == VARIANT_ADAFRUIT:
@@ -94,6 +97,7 @@ class View(threading.Thread):
             self.line2[i] = " "
             self.line3[i] = " "
             self.line4[i] = " "
+
         if VARIANT == VARIANT_ADAFRUIT:
             if self.lcd_needs_recovery:
                 self.init_display()
@@ -120,11 +124,19 @@ class View(threading.Thread):
             except Exception as e:
                 print(e)
 
+        self.leds.green(self.air_stream_on)
+        if not self.communication_error:
+            self.leds.red(not self.air_stream_on)
+        else:
+            self.leds.red(self.communication_error_led_toggle)
+
     def on_change_time(self):
         now = datetime.now()
         colon = ":" if (now.second & 1) else " "
         text = now.strftime("%d %b %H{}%M".format(colon))
         self.line1 = self.line1[0:8] + [c for c in text]
+        if self.communication_error:
+            self.communication_error_led_toggle = not self.communication_error_led_toggle
 
     def on_change_radon(self, Bq):
         if Bq is None:
@@ -134,13 +146,13 @@ class View(threading.Thread):
         for i in range(len(text)):
             self.line1[3+i] = text[i]
 
-    def on_change_temperature(self, temperature, line):
+    def on_change_temperature(self, temperature, line, offset=0):
         if temperature is None:
             text = "-----"
         else:
             text = "{:+5.1f}".format(temperature)
         for i in range(len(text)):
-            line[i] = text[i]
+            line[i+offset] = text[i]
 
     def on_change_humidity(self, humidity, line):
         if humidity is None:
@@ -151,12 +163,7 @@ class View(threading.Thread):
             line[6+i] = text[i]
 
     def on_change_dewpoint(self, dewpoint, line):
-        if dewpoint is None:
-            text = "-----"
-        else:
-            text = "{:+5.1f}".format(dewpoint)
-        for i in range(len(text)):
-            line[12+i] = text[i]
+        self.on_change_temperature(dewpoint, line, offset=12)
 
     def on_change_location(self, key, line):
         if (type(key) == str) and (2 == len(key)):
@@ -188,10 +195,12 @@ class View(threading.Thread):
         self.on_change_dewpoint(dewpoint, self.line4)
 
     def on_change_switches(self, switches):
-        self.line4[18] = ">" if switches["in_fan_on"] else "|"
+        self.line4[17] = "*" if switches["heater_on"] else " "
+        self.line4[18] = "<" if switches["in_fan_on"] else "|"
         self.line4[19] = ">" if switches["out_fan_on"] else "|"
-        self.leds.green(switches["in_fan_on"])
-        self.leds.red(not switches["in_fan_on"])
+
+        self.air_stream_on = switches["in_fan_on"] or switches["out_fan_on"]
+
         if switches["in_fan_on"]:
             self.switch_in_fan.on()
         else:
@@ -204,6 +213,11 @@ class View(threading.Thread):
             self.switch_heater.on()
         else:
             self.switch_heater.off()
+
+    def on_change_communication_error(self, status):
+        self.communication_error = status
+        if self.communication_error:
+            self.communication_error_led_toggle = True
 
     def run(self):
         # switch the out fan off

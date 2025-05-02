@@ -16,22 +16,32 @@ green LED is connected to GPIO13; green needs more current, thus 470 Ohm  to GND
 """
 
 class Leds():
-    def __init__(self):
+    def __init__(self, verbose=False):
+        self.verbose = verbose
+        self.rd_status = None
+        self.gn_status = None
         self.rd = HardwarePWM(pwm_channel=0, hz=1000, chip=0)
         self.gn = HardwarePWM(pwm_channel=1, hz=1000, chip=0)
 
     def red(self, on):
-        if on:
-            self.rd.start(10)
-        else:
-            self.rd.stop()
+        if self.rd_status != on:
+            self.rd_status = on
+            if self.verbose:
+                print("LED red {}".format("on" if on else "off"))
+            if on:
+                self.rd.start(10)
+            else:
+                self.rd.stop()
 
     def green(self, on):
-        if on:
-            self.gn.start(100)
-        else:
-            self.gn.stop()
-
+        if self.gn_status != on:
+            self.gn_status = on
+            if self.verbose:
+                print("LED green {}".format("on" if on else "off"))
+            if on:
+                self.gn.start(100)
+            else:
+                self.gn.stop()
 
 
 def main():

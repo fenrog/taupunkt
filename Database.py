@@ -103,6 +103,39 @@ class Database():
                     point += ' {}\n'.format(int(record.values["_time"].timestamp()))
                     f.write(point)
 
+    def write_DS18B20(self, key, temperature, error):
+        point = (
+            Point("DS18B20")
+            .tag("key", key)
+            .field("temperature", x2float(temperature))
+            .field("error", True if error else False)
+            .time(datetime.now(timezone.utc).replace(microsecond=0))
+        )
+        self.write_point(point=point, time_precission="s")
+
+    def export_DS18B20(self):
+        format = "%Y-%m-%dT%H:%M:%S.%fZ"
+        start = datetime.fromtimestamp(0).strftime(format)
+        query = f'from(bucket:"taupunkt_bucket")\
+|> range(start: {start})\
+|> filter(fn:(r) => r._measurement == "DS18B20")\
+|> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")\
+'
+        tables = self.query_api.query(query)
+        with open(EXPORT_FILE, "a") as f:
+            for table in tables:
+                for record in table.records:
+                    temperature = record.values["temperature"]
+                    point = '{},key={} '.format(
+                        record.values["_measurement"],
+                        record.values["key"]
+                    )
+                    if temperature is not None:
+                        point += 'temperature={},'.format(temperature)
+                    point += 'error={}'.format(True if record.values["error"] else False)
+                    point += ' {}\n'.format(int(record.values["_time"].timestamp()))
+                    f.write(point)
+
     def write_RD200(self, radon, error):
         point = (
             Point("RD200")
@@ -138,6 +171,7 @@ class Database():
             Point("ventilation")
             .field("radon_request", True if ventilation["radon_request"] else False)
             .field("humidity_request", True if ventilation["humidity_request"] else False)
+            .field("heater_request", True if ventilation["heater_request"] else False)
             .field("dewpoint_granted", True if ventilation["dewpoint_granted"] else False)
             .field("internal_temp_granted", True if ventilation["internal_temp_granted"] else False)
             .field("external_temp_granted", True if ventilation["external_temp_granted"] else False)
@@ -162,6 +196,7 @@ class Database():
                     )
                     point += 'radon_request={},'.format(True if record.values["radon_request"] else False)
                     point += 'humidity_request={},'.format(True if record.values["humidity_request"] else False)
+                    point += 'heater_request={},'.format(True if record.values["heater_request"] else False)
                     point += 'dewpoint_granted={},'.format(True if record.values["dewpoint_granted"] else False)
                     point += 'internal_temp_granted={},'.format(True if record.values["internal_temp_granted"] else False)
                     point += 'external_temp_granted={}'.format(True if record.values["external_temp_granted"] else False)
@@ -279,6 +314,11 @@ def create_test_data():
                 db.write_DHT22(key=key, temperature=None, rH=None, dewpoint=None, aH=None, lim=None, error=error)
             else:
                 db.write_DHT22(key=key, temperature=20+i+offset, rH=50+i+offset, dewpoint=10+i+offset, aH=10+i+offset, lim=30+i+offset, error=error)
+        for key in ["Ak", "Aw", "FL", "ZL", "AL"]:
+            if error:
+                db.write_DS18B20(key=key, temperature=None, error=error)
+            else:
+                db.write_DS18B20(key=key, temperature=20+i+offset, error=error)
         if 0 == i % 3:
             if error:
                 db.write_RD200(radon=200+i, error=error)
@@ -288,6 +328,7 @@ def create_test_data():
         db.write_ventilation({
             "radon_request": toggle,
             "humidity_request": toggle,
+            "heater_request": toggle,
             "dewpoint_granted": toggle,
             "internal_temp_granted": toggle,
             "external_temp_granted": toggle,
@@ -355,6 +396,7 @@ def export_bucket():
         os.remove(EXPORT_FILE)
     db = Database()
     db.export_DHT22()
+    db.export_DS18B20()
     db.export_RD200()
     db.export_ventilation()
     db.export_switches()

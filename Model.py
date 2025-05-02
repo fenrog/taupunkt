@@ -69,13 +69,19 @@ MIN_INTERNAL_TEMP_OFF = 7.4  # no ventilation is allowed <= this internal temper
 MIN_EXTERNAL_TEMP_ON  =  -9.9  # ventilation is allowed >= this external temperature
 MIN_EXTERNAL_TEMP_OFF = -10.1  # no ventilation is allowed <= this external temperature
 
+FORTLUFT_TEMP_HEATER_ON  = 2.5 # heater on when "Fortluft" is below 2.5°C
+FORTLUFT_TEMP_HEATER_OFF = 3.5 # heater off when "Fortluft" is above 3.5°C
 
 class Model():
     def __init__(self, view, verbose=False):
         self.verbose = verbose
         self.view = view
         self.view.model = self
+
+        # RD200 / radon sensor
         self.radon = {"Bq": None, "error": None}
+
+        # DHT22 / dewpoint sensors
         self.dewpoints = {
             "ext": {"temperature": None, "humidity": None, "dewpoint": None, "error": None},
             "NO": {"temperature": None, "humidity": None, "dewpoint": None, "error": None},
@@ -85,11 +91,23 @@ class Model():
         }
         self.internal = {"temperature": None, "humidity": None, "dewpoint_min": None, "dewpoint_max": None, "error": None, "key": None}
         self.external = {"temperature": None, "humidity": None, "dewpoint": None, "error": None}
-        self.communication_errors = ["ext", "NO", "SO", "SW", "NW"]
+        self.dp_communication_errors = ["ext", "NO", "SO", "SW", "NW"]
+
+        # DS18B20 / air stream temperature sensors
+        self.air_stream = {
+            "Ak": {"temperature": None, "error": None},
+            "Aw": {"temperature": None, "error": None},
+            "FL": {"temperature": None, "error": None},
+            "ZL": {"temperature": None, "error": None},
+            "AL": {"temperature": None, "error": None},
+        }
+        self.as_communication_errors = ["Ak", "Aw", "FL", "ZL", "AL"]
+
         self.show_west = True
         self.ventilation = {
             "radon_request": None,
             "humidity_request": None,
+            "heater_request": None,
             "dewpoint_granted": None,
             "internal_temp_granted": None,
             "external_temp_granted": None,
@@ -122,7 +140,7 @@ class Model():
             self.dewpoints[south]["dewpoint"],
             south)
         if self.t_next_write is not None:
-            # at east one time ventilation and swicthes have been calculated
+            # at least one time ventilation and switches have been calculated
             if time.time() >= self.t_next_write:
                 self.t_next_write = time.time() + 57.5  # will sync to roughly 1 minute as on_time is called every 5 seconds
                 self.db.write_ventilation(self.ventilation)
@@ -135,6 +153,7 @@ class Model():
             self.view.on_change_radon(Bq)
         if self.radon["error"] != error:
             self.radon["error"] = error
+            self.on_change_communication_errors()
 
         radon_request = self.ventilation["radon_request"]  # default for hyteresis
         if error:                                          # error handling
@@ -227,12 +246,50 @@ class Model():
                     diff_external.append(key)
             self.internal = internal
             self.external = external
-            self.on_change(diff_internal, diff_external)
-        if self.communication_errors != communication_errors:
-            self.communication_errors = communication_errors
+            self.on_change_dp(diff_internal, diff_external)
+        if self.dp_communication_errors != communication_errors:
+            self.dp_communication_errors = communication_errors
             self.on_change_communication_errors()
 
-    def on_change(self, diff_internal, diff_external):
+    def on_update_air_stream_temperatures(self, averaged):
+        # update communcation errors
+        communication_errors = []
+        for key in averaged:
+            self.db.write_DS18B20(  # will be written every 20 seconds due to DS18B20 module
+                key=key,
+                temperature=averaged[key]["temperature"],
+                error=averaged[key]["error"],
+            )
+            if averaged[key]["error"]:
+                communication_errors.append(key)
+        if self.as_communication_errors != communication_errors:
+            self.as_communication_errors = communication_errors
+            self.on_change_communication_errors()
+
+        # update ventilation (which is only dependant on the Fortluft temperature)
+        # When the Fortluft temperature drops close to the freezing point, the heater request is switched on,
+        # when the Fortluft temperature recovers, the heater request is switched off.
+        # A heater request does not mean the heater is actually switched on.
+        # The heater request is only fulfilled if also the in_fan is on.
+        if self.air_stream["FL"]["temperature"] != averaged["FL"]["temperature"]:
+            heater_request = self.ventilation["heater_request"] # default for hysteresis
+            if averaged["FL"]["temperature"] is None:                          # error handling
+                heater_request = False
+            elif averaged["FL"]["temperature"] >= FORTLUFT_TEMP_HEATER_OFF:    # hyteresis high
+                heater_request = False
+            elif averaged["FL"]["temperature"] <= FORTLUFT_TEMP_HEATER_ON:     # hysteresis low
+                heater_request = True
+
+            if self.ventilation["heater_request"] != heater_request:
+                self.ventilation["heater_request"] = heater_request
+                self.on_change_ventilation()
+
+        for key1 in self.air_stream:
+            for key2 in self.air_stream[key1]:
+                if self.air_stream[key1][key2] != averaged[key1][key2]:
+                    self.air_stream[key1][key2] = averaged[key1][key2]
+
+    def on_change_dp(self, diff_internal, diff_external):
         if self.verbose:
             if diff_internal:
                 print("internal", self.internal, diff_internal)
@@ -332,7 +389,7 @@ class Model():
                 # dewpoint difference, internal and exteranl temperatures are above the limits
                 out_fan_on = True
                 in_fan_on = True
-                heater_on = False # TODO: switch the heater depending on the "Fortluft" temperature (less than 2°C -> heater on)
+                heater_on = True if self.ventilation["heater_request"] else False
             else:
                 # at minimum one of dewpoint difference, internal or exteranl temperatures is below the limits
                 out_fan_on = False
@@ -366,9 +423,18 @@ class Model():
         self.view.on_change_external_humidity(external_humidity)
 
     def on_change_communication_errors(self):
+        if self.radon["error"] or len(self.dp_communication_errors) or len(self.as_communication_errors):
+            self.view.on_change_communication_error(True)
+        else:
+            self.view.on_change_communication_error(False)
         if self.verbose:
-            if self.communication_errors:
-                print("communication_errors", self.communication_errors)
+            if self.radon["error"]:
+                print("radon communication errors")
+            if self.dp_communication_errors:
+                print("dewpoint communication errors", self.dp_communication_errors)
+            if self.as_communication_errors:
+                print("air stream communication errors", self.as_communication_errors)
+
 
 def main():
     model = Model(verbose=True)

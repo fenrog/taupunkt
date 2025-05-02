@@ -141,7 +141,8 @@ class DHT22():
                     if (-40.0 > data[key]["temperature"]) or (+45 < data[key]["temperature"]):
                         print(f"temperature {data[key]['temperature']} is out of range for sensor at '{key}'")
                         raise Exception(f"temperature {data[key]['temperature']} is out of range for sensor at '{key}'")
-                    print("{:18.7f} {:3s} {:5.2f}°C {:5.2f}%".format(time.time(), key, data[key]["temperature"], data[key]["humidity"]))
+                    if self.verbose:
+                        print("{:18.7f} {:3s} {:5.2f}°C {:5.2f}%".format(time.time(), key, data[key]["temperature"], data[key]["humidity"]))
                     if self.offset_correction:
                         t_offset, h_offset = self.get_offset(key, data[key]["temperature"], data[key]["humidity"])
                         data[key]["temperature"] += t_offset
