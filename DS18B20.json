@@ -1,7 +1,7 @@
 {
-  "28-956afd0a6461": {"long": "Außenluft kalt", "short": "Ak"},
-  "28-00000034e077": {"long": "Außenluft warm", "short": "Aw"},
-  "28-00000037b69a": {"long": "Fortluft", "short": "FL"},
-  "28-000000383007": {"long": "Zuluft", "short": "ZL"},
-  "28-0000003895cd": {"long": "Abluft", "short": "AL"}
+  "28-2a3af00a6461": {"long": "Außenluft kalt", "short": "Ak"},
+  "28-00000035fbb8": {"long": "Außenluft warm", "short": "Aw"},
+  "28-00000037485c": {"long": "Fortluft", "short": "FL"},
+  "28-0000003912b9": {"long": "Zuluft", "short": "ZL"},
+  "28-00000038af27": {"long": "Abluft", "short": "AL"}
 }
